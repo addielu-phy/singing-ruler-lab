@@ -31,8 +31,20 @@ async function loadPage(context, label) {
   return { page, errors };
 }
 
-async function labSvgGeometryChecks(page, label) {
+async function setMaximumTickState(page) {
+  await page.locator('#material').selectOption('custom');
+  for (const [id, value] of [['young', 500], ['density', 100], ['length', 3], ['thickness', 4]]) {
+    await page.locator(`#${id}`).evaluate((element, next) => {
+      element.value = String(next);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+    }, value);
+  }
+}
+
+async function labSvgGeometryChecks(page, label, extreme = false) {
   const modes = {};
+  const scenario = extreme ? 'maximum-tick' : 'default';
+  if (extreme) await setMaximumTickState(page);
   for (const mode of [1, 2, 3, 4]) {
     await page.locator('#mode').selectOption(String(mode));
     const geometry = await page.evaluate(({ envelope }) => {
@@ -62,16 +74,33 @@ async function labSvgGeometryChecks(page, label) {
         || box.right > chartRect.right + 0.5
         || box.bottom > chartRect.bottom + 0.5);
       const chartGraphicOverlaps = [];
-      const chartMatrix = chart.getScreenCTM();
       for (const graphic of chart.querySelectorAll('path, line, circle')) {
-        const length = graphic.getTotalLength();
         const graphicMatrix = graphic.getScreenCTM();
-        const screenStroke = Number.parseFloat(getComputedStyle(graphic).strokeWidth || '0') * Math.hypot(graphicMatrix.a, graphicMatrix.b);
+        const graphicStyle = getComputedStyle(graphic);
+        const hasFill = graphicStyle.fill !== 'none' && Number.parseFloat(graphicStyle.fillOpacity || '1') > 0;
+        if (hasFill && typeof graphic.isPointInFill === 'function') {
+          const inverseMatrix = graphicMatrix.inverse();
+          for (const box of chartTextBoxes) {
+            let fillHit = false;
+            for (let x = box.left; x <= box.right + 1 && !fillHit; x += 1) {
+              for (let y = box.top; y <= box.bottom + 1; y += 1) {
+                const localPoint = new DOMPoint(Math.min(x, box.right), Math.min(y, box.bottom)).matrixTransform(inverseMatrix);
+                if (graphic.isPointInFill(localPoint)) {
+                  fillHit = true;
+                  break;
+                }
+              }
+            }
+            if (fillHit) chartGraphicOverlaps.push(box.text);
+          }
+        }
+        const length = graphic.getTotalLength();
+        const screenStroke = Number.parseFloat(graphicStyle.strokeWidth || '0') * Math.hypot(graphicMatrix.a, graphicMatrix.b);
         const clearance = screenStroke / 2 + 1;
         const samples = Math.max(2, Math.ceil(length / 3));
         for (let index = 0; index <= samples; index += 1) {
           const point = graphic.getPointAtLength(length * index / samples);
-          const screenPoint = new DOMPoint(point.x, point.y).matrixTransform(chartMatrix);
+          const screenPoint = new DOMPoint(point.x, point.y).matrixTransform(graphicMatrix);
           const hit = chartTextBoxes.find((box) => screenPoint.x >= box.left - clearance
             && screenPoint.x <= box.right + clearance
             && screenPoint.y >= box.top - clearance
@@ -114,16 +143,60 @@ async function labSvgGeometryChecks(page, label) {
         rulerEnvelopeOverlaps,
       };
     }, { envelope: rulerExtremaByMode[mode] });
-    assert.deepEqual(geometry.chartClippedText, [], `${label}: mode ${mode} chart text stays inside SVG`);
-    assert.deepEqual(geometry.chartTextOverlaps, [], `${label}: mode ${mode} chart text has safe pairwise clearance`);
-    assert.deepEqual(geometry.chartGraphicOverlaps, [], `${label}: mode ${mode} chart text clears painted graphics`);
-    assert.deepEqual(geometry.rulerClippedText, [], `${label}: mode ${mode} ruler labels stay inside SVG`);
-    assert.deepEqual(geometry.rulerTextOverlaps, [], `${label}: mode ${mode} ruler labels have safe pairwise clearance`);
-    assert.deepEqual(geometry.rulerEnvelopeOverlaps, [], `${label}: mode ${mode} ruler labels clear both full-amplitude extrema`);
+    assert.deepEqual(geometry.chartClippedText, [], `${label}: ${scenario} mode ${mode} chart text stays inside SVG`);
+    assert.deepEqual(geometry.chartTextOverlaps, [], `${label}: ${scenario} mode ${mode} chart text has safe pairwise clearance`);
+    assert.deepEqual(geometry.chartGraphicOverlaps, [], `${label}: ${scenario} mode ${mode} chart text clears painted graphics`);
+    assert.deepEqual(geometry.rulerClippedText, [], `${label}: ${scenario} mode ${mode} ruler labels stay inside SVG`);
+    assert.deepEqual(geometry.rulerTextOverlaps, [], `${label}: ${scenario} mode ${mode} ruler labels have safe pairwise clearance`);
+    assert.deepEqual(geometry.rulerEnvelopeOverlaps, [], `${label}: ${scenario} mode ${mode} ruler labels clear both full-amplitude extrema`);
     modes[mode] = geometry;
   }
-  await page.locator('#mode').selectOption('1');
+  if (extreme) await page.locator('#reset').click();
+  else await page.locator('#mode').selectOption('1');
   return modes;
+}
+
+async function resizeTransitionChecks(browser) {
+  const transitions = [[1025, 1024], [920, 921], [1101, 1100]];
+  const results = {};
+  for (const [fromWidth, toWidth] of transitions) {
+    const label = `resize${fromWidth}to${toWidth}`;
+    const context = await browser.newContext({ viewport: { width: fromWidth, height: 900 }, deviceScaleFactor: 4, reducedMotion: 'no-preference' });
+    const { page } = await loadPage(context, label);
+    await setMaximumTickState(page);
+    await page.locator('#mode').selectOption('4');
+    await page.setViewportSize({ width: toWidth, height: 900 });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const geometry = await page.evaluate(() => {
+      const chart = document.querySelector('#lengthChart');
+      const chartRect = chart.getBoundingClientRect();
+      const boxes = [...chart.querySelectorAll('.chart-text')].map((node) => {
+        const box = node.getBoundingClientRect();
+        return { text: node.textContent, left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+      });
+      const clipped = boxes.filter((box) => box.left < chartRect.left - 0.5
+        || box.top < chartRect.top - 0.5
+        || box.right > chartRect.right + 0.5
+        || box.bottom > chartRect.bottom + 0.5);
+      const overlaps = [];
+      for (let first = 0; first < boxes.length; first += 1) {
+        for (let second = first + 1; second < boxes.length; second += 1) {
+          const a = boxes[first];
+          const b = boxes[second];
+          const overlapWidth = Math.min(a.right + 2, b.right + 2) - Math.max(a.left - 2, b.left - 2);
+          const overlapHeight = Math.min(a.bottom + 2, b.bottom + 2) - Math.max(a.top - 2, b.top - 2);
+          if (overlapWidth > 0.5 && overlapHeight > 0.5) overlaps.push([a.text, b.text]);
+        }
+      }
+      return { clipped, overlaps };
+    });
+    assert.deepEqual(geometry.clipped, [], `${label}: resized chart text stays inside SVG`);
+    assert.deepEqual(geometry.overlaps, [], `${label}: resized maximum-tick chart text has safe clearance`);
+    await page.locator('.chart-card').screenshot({ path: `${outDir}/${label}-maximum-mode4-chart.png` });
+    results[label] = geometry;
+    await context.close();
+  }
+  return results;
 }
 
 async function structuralChecks(page, label, expectedWidth, mobile) {
@@ -315,7 +388,10 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
     .filter((x) => x.scrollWidth > x.clientWidth + 1));
   assert.deepEqual(overflow, [], `${label}: dense content overflow`);
 
-  result.labSvgModes = await labSvgGeometryChecks(page, label);
+  result.labSvgModes = {
+    default: await labSvgGeometryChecks(page, label),
+    maximumTick: await labSvgGeometryChecks(page, label, true),
+  };
   await page.evaluate(axeSource);
   const axe = await page.evaluate(async () => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } }));
   assert.deepEqual(axe.violations, [], `${label}: axe violations ${JSON.stringify(axe.violations.map((x) => x.id))}`);
@@ -333,7 +409,7 @@ async function interactionChecks(page) {
       step: window.__THEORY_EXPLAINER__.step,
       tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => ({ id: tab.id, selected: tab.getAttribute('aria-selected'), tabIndex: tab.tabIndex })),
       panels: [...document.querySelectorAll('.story-panel')].map((panel) => ({ id: panel.id, hidden: panel.hidden, tabIndex: panel.tabIndex })),
-      visuals: [...document.querySelectorAll('.story-visual-group')].map((visual) => ({ id: visual.id, hidden: visual.hidden, display: getComputedStyle(visual).display })),
+      visuals: [...document.querySelectorAll('[data-theory-visual]')].map((visual) => ({ id: visual.id, hidden: visual.hidden, display: getComputedStyle(visual).display })),
       status: document.querySelector('#theoryStatus').textContent,
       motionButton: document.querySelector('#theoryMotion').textContent,
       autoButton: document.querySelector('#theoryAuto').textContent,
@@ -542,6 +618,9 @@ try {
   await mediumPage.screenshot({ path: `${outDir}/medium1024.png`, fullPage: true });
   await mediumPage.locator('#story-tab-3').click();
   await mediumPage.locator('.theory-story').screenshot({ path: `${outDir}/medium1024-step3.png` });
+  await setMaximumTickState(mediumPage);
+  await mediumPage.locator('#mode').selectOption('4');
+  await mediumPage.locator('.chart-card').screenshot({ path: `${outDir}/medium1024-maximum-mode4-chart.png` });
   await medium.close();
 
   for (const width of [921, 920]) {
@@ -552,6 +631,10 @@ try {
     await breakpointPage.screenshot({ path: `${outDir}/${label}.png`, fullPage: true });
     await breakpointPage.locator('#mode').selectOption('4');
     await breakpointPage.locator('.chart-card').screenshot({ path: `${outDir}/${label}-mode4-chart.png` });
+    await setMaximumTickState(breakpointPage);
+    await breakpointPage.locator('#mode').selectOption('4');
+    await breakpointPage.locator('.chart-card').screenshot({ path: `${outDir}/${label}-maximum-mode4-chart.png` });
+    await breakpointPage.locator('#reset').click();
     await breakpointPage.locator('#mode').selectOption('1');
     await breakpointPage.evaluate(({ envelope }) => {
       document.querySelector('.site-header').style.visibility = 'hidden';
@@ -562,12 +645,17 @@ try {
     await breakpoint.close();
   }
 
+  report.resizeTransitions = await resizeTransitionChecks(browser);
+
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'no-preference' });
   const { page: mobilePage } = await loadPage(mobile, 'mobile390');
   await structuralChecks(mobilePage, 'mobile390', 390, true);
   await mobilePage.screenshot({ path: `${outDir}/mobile390.png`, fullPage: true });
   await mobilePage.locator('#story-tab-3').click();
   await mobilePage.locator('.theory-story').screenshot({ path: `${outDir}/mobile390-step3.png` });
+  await setMaximumTickState(mobilePage);
+  await mobilePage.locator('#mode').selectOption('4');
+  await mobilePage.locator('.chart-card').screenshot({ path: `${outDir}/mobile390-maximum-mode4-chart.png` });
   await mobile.close();
 
   const narrow = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: 'no-preference' });
@@ -576,6 +664,9 @@ try {
   await narrowPage.screenshot({ path: `${outDir}/narrow320.png`, fullPage: true });
   await narrowPage.locator('#story-tab-3').click();
   await narrowPage.locator('.theory-story').screenshot({ path: `${outDir}/narrow320-step3.png` });
+  await setMaximumTickState(narrowPage);
+  await narrowPage.locator('#mode').selectOption('4');
+  await narrowPage.locator('.chart-card').screenshot({ path: `${outDir}/narrow320-maximum-mode4-chart.png` });
   await narrow.close();
 
   const reduced = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });

@@ -180,9 +180,9 @@ function drawLengthChart() {
   const narrow = window.matchMedia('(max-width: 767px)').matches;
   const width = narrow ? 360 : 700;
   const height = narrow ? 300 : 320;
-  const margin = narrow
-    ? { left: 136, right: 16, top: 22, bottom: 60 }
-    : { left: 136, right: 22, top: 25, bottom: 52 };
+  const baseMargin = narrow
+    ? { right: 16, top: 22, bottom: 60 }
+    : { right: 22, top: 25, bottom: 52 };
   const points = [];
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   for (let lengthCm = 3; lengthCm <= 20; lengthCm += 0.5) {
@@ -192,8 +192,6 @@ function drawLengthChart() {
   }
   const maxX = Math.max(...points.map((p) => p.x));
   const maxY = Math.max(...points.map((p) => p.y)) * 1.08;
-  const sx = (x) => margin.left + x / maxX * (width - margin.left - margin.right);
-  const sy = (y) => height - margin.bottom - y / maxY * (height - margin.top - margin.bottom);
   const el = (name, attrs = {}, text = '') => {
     const node = document.createElementNS('http://www.w3.org/2000/svg', name);
     Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
@@ -201,11 +199,36 @@ function drawLengthChart() {
     return node;
   };
   svg.replaceChildren(svg.querySelector('title'), svg.querySelector('desc'));
+
   const tickCount = narrow ? 2 : 4;
-  for (let i = 0; i <= tickCount; i += 1) {
-    const y = maxY * i / tickCount;
-    svg.append(el('line', { x1: margin.left, x2: width - margin.right, y1: sy(y), y2: sy(y), class: 'chart-grid' }));
-    svg.append(el('text', { x: margin.left - 10, y: sy(y) + 5, 'text-anchor': 'end', class: 'chart-text' }, fmt(y, 0)));
+  const yTicks = Array.from({ length: tickCount + 1 }, (_, index) => {
+    const value = maxY * index / tickCount;
+    return { value, label: fmt(value, 0) };
+  });
+  const measureLayer = el('g', { visibility: 'hidden', 'aria-hidden': 'true' });
+  const tickMeasures = yTicks.map(({ label }) => el('text', { class: 'chart-text' }, label));
+  const titleMeasure = el('text', { x: 0, y: 0, class: 'chart-text' }, 'EB頻率 f（Hz）');
+  measureLayer.append(...tickMeasures, titleMeasure);
+  svg.append(measureLayer);
+  const maxTickWidth = Math.max(...tickMeasures.map((node) => node.getComputedTextLength()));
+  const titleBox = titleMeasure.getBBox();
+  measureLayer.remove();
+
+  const edgePadding = 8;
+  const titleTickGap = 8;
+  const tickAxisGap = 10;
+  const axisX = Math.ceil(edgePadding - titleBox.y);
+  const titleRight = axisX + titleBox.y + titleBox.height;
+  const margin = {
+    ...baseMargin,
+    left: Math.ceil(titleRight + titleTickGap + maxTickWidth + tickAxisGap),
+  };
+  const sx = (x) => margin.left + x / maxX * (width - margin.left - margin.right);
+  const sy = (y) => height - margin.bottom - y / maxY * (height - margin.top - margin.bottom);
+
+  for (const tick of yTicks) {
+    svg.append(el('line', { x1: margin.left, x2: width - margin.right, y1: sy(tick.value), y2: sy(tick.value), class: 'chart-grid' }));
+    svg.append(el('text', { x: margin.left - tickAxisGap, y: sy(tick.value) + 5, 'text-anchor': 'end', class: 'chart-text' }, tick.label));
   }
   svg.append(el('line', { x1: margin.left, x2: margin.left, y1: margin.top, y2: height - margin.bottom, class: 'chart-axis' }));
   svg.append(el('line', { x1: margin.left, x2: width - margin.right, y1: height - margin.bottom, y2: height - margin.bottom, class: 'chart-axis' }));
@@ -214,7 +237,6 @@ function drawLengthChart() {
   const selectedX = 1 / (currentState.lengthM * 100) ** 2;
   svg.append(el('circle', { cx: sx(selectedX), cy: sy(currentSnapshot.ebFrequencyHz), r: narrow ? 8 : 7, class: 'chart-selected' }));
   svg.append(el('text', { x: width / 2, y: height - 14, 'text-anchor': 'middle', class: 'chart-text' }, '1 / L²（cm⁻²）'));
-  const axisX = 32;
   svg.append(el('text', { x: axisX, y: height / 2, transform: `rotate(-90 ${axisX} ${height / 2})`, 'text-anchor': 'middle', class: 'chart-text' }, 'EB頻率 f（Hz）'));
   $('#chartDesc').textContent = `圖中固定使用Euler–Bernoulli模型；所選長度的EB基準頻率為${fmt(currentSnapshot.ebFrequencyHz, 2)}赫茲，頻率與一除以長度平方呈直線。`;
   $('#chartLengthValue').textContent = `${fmt(currentState.lengthM * 100, 1)} cm`;
@@ -298,6 +320,19 @@ detailMedia.addEventListener('change', () => {
   syncDetails();
   if (currentState) drawLengthChart();
 });
+let chartResizeFrame = 0;
+const scheduleChartRedraw = () => {
+  cancelAnimationFrame(chartResizeFrame);
+  chartResizeFrame = requestAnimationFrame(() => {
+    chartResizeFrame = 0;
+    if (currentState) drawLengthChart();
+  });
+};
+window.addEventListener('resize', scheduleChartRedraw, { passive: true });
+if (document.fonts) {
+  document.fonts.ready.then(scheduleChartRedraw);
+  document.fonts.addEventListener('loadingdone', scheduleChartRedraw);
+}
 motionPreference.addEventListener('change', (event) => {
   if (event.matches) setRunning(false, { announce: true, reducedMotion: true });
 });
