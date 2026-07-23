@@ -133,8 +133,8 @@ export function initTheoryExplainer() {
   }
 
   function setStep(nextStep, { focus = false, announce = true, manual = false } = {}) {
-    const normalizedStep = Number(nextStep);
-    if (!Number.isInteger(normalizedStep) || normalizedStep < 1 || normalizedStep > 3) return false;
+    if (typeof nextStep !== 'number' || !Number.isInteger(nextStep) || nextStep < 1 || nextStep > 3) return false;
+    const normalizedStep = nextStep;
     const focusWasInTabs = tabs.includes(document.activeElement);
     step = normalizedStep;
     if (manual) stopAuto({ restoreMotion: true });

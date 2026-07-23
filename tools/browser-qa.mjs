@@ -39,6 +39,11 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
       });
       return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
     };
+    const contrastRatio = (foreground, background) => {
+      const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    };
+    const firstGradientColor = (element) => getComputedStyle(element).backgroundImage.match(/rgb\([^)]*\)/)?.[0];
     const focusColor = getComputedStyle(document.querySelector('#reset')).outlineColor;
     const focusContrast = (luminance('rgb(255,255,255)') + 0.05) / (luminance(focusColor) + 0.05);
     const theoryApi = window.__THEORY_EXPLAINER__;
@@ -51,8 +56,48 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
         const box = label.getBBox();
         return { text: label.textContent, x: box.x, y: box.y, right: box.x + box.width, bottom: box.y + box.height };
       }).filter((box) => box.x < -1 || box.y < -1 || box.right > 761 || box.bottom > 361);
-      const tabsRect = document.querySelector('.story-tabs').getBoundingClientRect();
-      const visualRect = document.querySelector('.story-visual').getBoundingClientRect();
+      const renderedBoxes = labels.map((label) => {
+        const box = label.getBoundingClientRect();
+        return { text: label.textContent, left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+      });
+      const overlappingLabels = [];
+      for (let first = 0; first < renderedBoxes.length; first += 1) {
+        for (let second = first + 1; second < renderedBoxes.length; second += 1) {
+          const a = renderedBoxes[first];
+          const b = renderedBoxes[second];
+          const overlapWidth = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const overlapHeight = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (overlapWidth > 0.5 && overlapHeight > 0.5) overlappingLabels.push([a.text, b.text]);
+        }
+      }
+      const graphicOverlaps = [];
+      if (step === 3) {
+        const envelope = document.querySelector('#storyModeEnvelope');
+        const animatedBeam = document.querySelector('#storyBeam3');
+        const pathLength = envelope.getTotalLength();
+        const halfStroke = Math.max(
+          Number.parseFloat(getComputedStyle(envelope).strokeWidth),
+          Number.parseFloat(getComputedStyle(animatedBeam).strokeWidth),
+        ) / 2;
+        const labelBoxes = labels.map((label) => ({ text: label.textContent, box: label.getBBox() }));
+        for (let sample = 0; sample <= 400; sample += 1) {
+          const point = envelope.getPointAtLength((pathLength * sample) / 400);
+          const extrema = [point.y, 340 - point.y];
+          labelBoxes.forEach(({ text, box }) => {
+            const insideX = point.x >= box.x - halfStroke && point.x <= box.x + box.width + halfStroke;
+            const intersectsY = extrema.some((y) => y >= box.y - halfStroke && y <= box.y + box.height + halfStroke);
+            if (insideX && intersectsY && !graphicOverlaps.includes(text)) graphicOverlaps.push(text);
+          });
+        }
+      }
+      const heading = document.querySelector('.story-heading');
+      const tabsContainer = document.querySelector('.story-tabs');
+      const visualContainer = document.querySelector('.story-visual');
+      const storySvg = document.querySelector('#theorySvg');
+      const controls = document.querySelector('.story-controls');
+      const comesBefore = (first, second) => Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const tabsRect = tabsContainer.getBoundingClientRect();
+      const visualRect = visualContainer.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
       return {
         step,
@@ -64,11 +109,34 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
         labelCount: labels.length,
         minLabelHeight: labels.length ? Math.min(...labels.map((x) => x.getBoundingClientRect().height)) : 0,
         clippedLabels,
+        overlappingLabels,
+        graphicOverlaps,
         panelFocusable: panel.tabIndex === 0,
+        fullDomSequence: comesBefore(heading, tabsContainer)
+          && comesBefore(tabsContainer, storySvg)
+          && comesBefore(storySvg, panel)
+          && comesBefore(panel, controls),
         mobileVisualBetweenTabsAndPanel: !mobile || (visualRect.top >= tabsRect.bottom - 1 && visualRect.bottom <= panelRect.top + 1),
       };
     });
     theoryApi?.setStep(1);
+    const storyBackground = getComputedStyle(document.querySelector('.story-visual')).backgroundColor;
+    const hookBackground = firstGradientColor(document.querySelector('.student-hook'));
+    const labBackground = firstGradientColor(document.querySelector('.lab-section'));
+    const contrastChecks = [
+      ['body text', getComputedStyle(document.body).color, getComputedStyle(document.body).backgroundColor],
+      ['muted source text', getComputedStyle(document.querySelector('.source-note')).color, getComputedStyle(document.body).backgroundColor],
+      ['green eyebrow', getComputedStyle(document.querySelector('.hero-copy .eyebrow')).color, getComputedStyle(document.body).backgroundColor],
+      ['brand mark', getComputedStyle(document.querySelector('.brand-mark')).color, getComputedStyle(document.querySelector('.brand-mark')).backgroundColor],
+      ['hero formula', getComputedStyle(document.querySelector('.hero-equation')).color, getComputedStyle(document.querySelector('.hero-equation')).backgroundColor],
+      ['story hook heading', getComputedStyle(document.querySelector('.student-hook strong')).color, hookBackground],
+      ['story hook text', getComputedStyle(document.querySelector('.student-hook span')).color, hookBackground],
+      ['story SVG label', getComputedStyle(document.querySelector('.story-svg-label')).fill, storyBackground],
+      ['story SVG note', getComputedStyle(document.querySelector('.story-svg-note')).fill, storyBackground],
+      ['story SVG green label', getComputedStyle(document.querySelector('.story-green')).fill, storyBackground],
+      ['story SVG mode tag', getComputedStyle(document.querySelector('.mode-tags text')).fill, storyBackground],
+      ['lab muted text', getComputedStyle(document.querySelector('.split-heading p')).color, labBackground],
+    ].map(([name, foreground, background]) => ({ name, foreground, background, ratio: contrastRatio(foreground, background) }));
     return {
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -91,6 +159,7 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
       chartIsEbBaseline: document.querySelector('.chart-heading h3')?.textContent.includes('EB基準'),
       focusColor,
       focusContrast,
+      contrastChecks,
       expectedWidth,
       mobile,
     };
@@ -107,10 +176,13 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
     assert.equal(step.panelOverflow, false, `${label}: step ${step.step} panel overflow`);
     assert.equal(step.formulaOverflow, false, `${label}: step ${step.step} formula overflow`);
     assert.ok(step.labelCount > 0, `${label}: step ${step.step} has SVG labels`);
-    const minimumLabelHeight = mobile ? 13 : 10;
+    const minimumLabelHeight = 14;
     assert.ok(step.minLabelHeight >= minimumLabelHeight, `${label}: step ${step.step} SVG labels readable (${step.minLabelHeight}px)`);
     assert.deepEqual(step.clippedLabels, [], `${label}: step ${step.step} SVG labels clipped`);
+    assert.deepEqual(step.overlappingLabels, [], `${label}: step ${step.step} SVG labels overlap`);
+    assert.deepEqual(step.graphicOverlaps, [], `${label}: step ${step.step} SVG labels overlap the mode path at an animation extremum`);
     assert.equal(step.panelFocusable, true, `${label}: step ${step.step} tabpanel is keyboard-focusable`);
+    assert.equal(step.fullDomSequence, true, `${label}: step ${step.step} DOM/accessibility order is heading, tabs, SVG, panel, controls`);
     assert.equal(step.mobileVisualBetweenTabsAndPanel, true, `${label}: step ${step.step} mobile visual follows tabs before panel`);
   });
   assert.ok(result.formulaCount >= 14, `${label}: formula count`);
@@ -123,6 +195,7 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
   assert.equal(result.forceText, '4.19', `${label}: default 5 mm release force`);
   assert.equal(result.chartIsEbBaseline, true, `${label}: length chart explicitly EB-only`);
   assert.ok(result.focusContrast >= 3, `${label}: focus indicator contrast ${result.focusContrast}`);
+  assert.equal(result.contrastChecks.every((check) => check.ratio >= 4.5), true, `${label}: conservative color contrast ${JSON.stringify(result.contrastChecks)}`);
   if (mobile) {
     assert.ok(result.chartTextHeight >= 10, `${label}: chart text readable (${result.chartTextHeight}px)`);
     assert.ok(result.rulerLabelHeight >= 10, `${label}: ruler labels readable (${result.rulerLabelHeight}px)`);
@@ -150,6 +223,42 @@ async function interactionChecks(page) {
   const setRange = async (id, value) => {
     await page.locator(`#${id}`).evaluate((el, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, value);
   };
+  const invalidStepInputs = await page.evaluate(() => {
+    const before = {
+      step: window.__THEORY_EXPLAINER__.step,
+      selected: document.querySelector('[role="tab"][aria-selected="true"]').id,
+    };
+    const values = [
+      true,
+      [2],
+      {},
+      Symbol('x'),
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      1.5,
+      0,
+      4,
+      { [Symbol.toPrimitive]() { throw new Error('coercion must not run'); } },
+    ];
+    const results = values.map((value) => {
+      try {
+        return { returned: window.__THEORY_EXPLAINER__.setStep(value), threw: false };
+      } catch (error) {
+        return { returned: null, threw: true, name: error.name };
+      }
+    });
+    return {
+      before,
+      after: {
+        step: window.__THEORY_EXPLAINER__.step,
+        selected: document.querySelector('[role="tab"][aria-selected="true"]').id,
+      },
+      results,
+    };
+  });
+  assert.deepEqual(invalidStepInputs.results, invalidStepInputs.results.map(() => ({ returned: false, threw: false })), 'public setStep rejects invalid inputs without coercion or exceptions');
+  assert.deepEqual(invalidStepInputs.after, invalidStepInputs.before, 'invalid setStep inputs do not mutate state or DOM');
+
   await page.locator('#story-tab-2').click();
   assert.equal(await page.locator('#story-tab-2').getAttribute('aria-selected'), 'true', 'theory tab click selects step 2');
   assert.equal(await page.locator('#story-panel-2').isVisible(), true, 'theory step 2 panel visible');
@@ -289,18 +398,32 @@ try {
   await structuralChecks(desktopPage, 'desktop', 1440, false);
   await interactionChecks(desktopPage);
   await desktopPage.screenshot({ path: `${outDir}/desktop.png`, fullPage: true });
+  await desktopPage.locator('#story-tab-3').click();
+  await desktopPage.locator('.theory-story').screenshot({ path: `${outDir}/desktop-step3.png` });
   await desktop.close();
+
+  const medium = await browser.newContext({ viewport: { width: 1024, height: 900 }, reducedMotion: 'no-preference' });
+  const { page: mediumPage } = await loadPage(medium, 'medium1024');
+  await structuralChecks(mediumPage, 'medium1024', 1024, false);
+  await mediumPage.screenshot({ path: `${outDir}/medium1024.png`, fullPage: true });
+  await mediumPage.locator('#story-tab-3').click();
+  await mediumPage.locator('.theory-story').screenshot({ path: `${outDir}/medium1024-step3.png` });
+  await medium.close();
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'no-preference' });
   const { page: mobilePage } = await loadPage(mobile, 'mobile390');
   await structuralChecks(mobilePage, 'mobile390', 390, true);
   await mobilePage.screenshot({ path: `${outDir}/mobile390.png`, fullPage: true });
+  await mobilePage.locator('#story-tab-3').click();
+  await mobilePage.locator('.theory-story').screenshot({ path: `${outDir}/mobile390-step3.png` });
   await mobile.close();
 
   const narrow = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: 'no-preference' });
   const { page: narrowPage } = await loadPage(narrow, 'narrow320');
   await structuralChecks(narrowPage, 'narrow320', 320, true);
   await narrowPage.screenshot({ path: `${outDir}/narrow320.png`, fullPage: true });
+  await narrowPage.locator('#story-tab-3').click();
+  await narrowPage.locator('.theory-story').screenshot({ path: `${outDir}/narrow320-step3.png` });
   await narrow.close();
 
   const reduced = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });

@@ -89,7 +89,6 @@
           </aside>
 
           <section class="theory-story" aria-labelledby="story-title">
-            <div class="story-copy">
               <div class="story-heading">
                 <p class="tech-label">90-SECOND VISUAL GUIDE</p>
                 <h3 id="story-title">先看尺怎麼動，再讀公式</h3>
@@ -101,6 +100,51 @@
                 <button id="story-tab-2" type="button" role="tab" aria-selected="false" aria-controls="story-panel-2" tabindex="-1" data-theory-step="2"><b>2</b><span>會加速</span></button>
                 <button id="story-tab-3" type="button" role="tab" aria-selected="false" aria-controls="story-panel-3" tabindex="-1" data-theory-step="3"><b>3</b><span>選頻率</span></button>
               </div>
+
+            <div class="story-visual" role="group" aria-label="三步力學示意動畫">
+              <svg id="theorySvg" viewBox="0 0 760 360" role="img" aria-labelledby="theorySvgTitle theorySvgDesc">
+                <title id="theorySvgTitle">懸臂尺從彎曲、加速到形成模態的三步示意</title>
+                <desc id="theorySvgDesc">目前顯示第1步：手向下壓自由端，尺的彎曲與回復作用增加。</desc>
+                <defs>
+                  <linearGradient id="storyBeamGradient" x1="0" x2="1"><stop stop-color="#18e299"/><stop offset="1" stop-color="#7fffd0"/></linearGradient>
+                  <marker id="storyArrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#ffcf70"/></marker>
+                  <marker id="storyArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#18e299"/></marker>
+                  <marker id="storyArrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#79baff"/></marker>
+                </defs>
+                <rect class="story-grid-bg" x="0" y="0" width="760" height="360" rx="22"/>
+                <line class="story-reference" x1="92" y1="170" x2="704" y2="170"/>
+                <g class="story-clamp"><rect x="42" y="98" width="50" height="144" rx="6"/><line x1="54" y1="108" x2="82" y2="132"/><line x1="54" y1="138" x2="82" y2="162"/><line x1="54" y1="168" x2="82" y2="192"/><line x1="54" y1="198" x2="82" y2="222"/></g>
+
+                <g data-theory-visual="1">
+                  <path id="storyBeam1" class="story-beam" d="M92 170 C280 170 510 182 704 230"/>
+                  <line id="storyPressArrow" class="story-force-arrow" x1="704" y1="90" x2="704" y2="205" marker-end="url(#storyArrowAmber)"/>
+                  <text class="story-svg-label" x="704" y="76" text-anchor="end">手向下壓</text>
+                  <path class="story-return-arrow" d="M560 222 Q610 187 648 180" marker-end="url(#storyArrowGreen)"/>
+                  <text class="story-svg-label story-green" x="704" y="276" text-anchor="end">彈性想把尺拉回</text>
+                  <text class="story-svg-note" x="104" y="344">彎曲越明顯，內部彎矩越大</text>
+                </g>
+
+                <g data-theory-visual="2" hidden>
+                  <path id="storyBeam2" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
+                  <g id="storyMassLayer" aria-hidden="true"></g>
+                  <line id="storyAccelArrow" class="story-accel-arrow" x1="520" y1="235" x2="520" y2="178" marker-end="url(#storyArrowBlue)"/>
+                  <text class="story-svg-label" x="704" y="76" text-anchor="end">藍箭頭：淨力／加速度方向</text>
+                  <text class="story-svg-note" x="104" y="344">每一小段都有彈性，也都有質量</text>
+                </g>
+
+                <g data-theory-visual="3" hidden>
+                  <path id="storyModeEnvelope" class="story-mode-envelope" d="M92 170 C280 170 510 182 704 218"/>
+                  <path id="storyBeam3" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
+                  <circle class="boundary-dot fixed" cx="92" cy="170" r="10"/>
+                  <circle class="boundary-dot free" cx="704" cy="170" r="10"/>
+                  <text class="story-svg-label" x="102" y="48">固定端：不能移動、不能轉動</text>
+                  <text class="story-svg-label" x="704" y="292" text-anchor="end">自由端：彎矩與剪力為0</text>
+                  <text class="story-svg-note" x="104" y="104">虛線：第一模態最大位移形狀</text>
+                  <g class="mode-tags"><text x="104" y="346">圖中只畫第1模態：β₁=1.875</text></g>
+                </g>
+              </svg>
+              <p id="theoryVisualCaption" class="story-caption"><b>第1步：</b>先把自由端向下壓。彎曲是被視覺放大的概念示意。</p>
+            </div>
 
               <div class="story-panels">
                 <section id="story-panel-1" class="story-panel" role="tabpanel" tabindex="0" aria-labelledby="story-tab-1" data-theory-panel="1">
@@ -141,52 +185,6 @@
                 <button id="theoryMotion" class="button secondary" type="button">暫停示意</button>
               </div>
               <p id="theoryStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true">目前顯示第1步：彎曲產生回復作用。</p>
-            </div>
-
-            <div class="story-visual" role="group" aria-label="三步力學示意動畫">
-              <svg id="theorySvg" viewBox="0 0 760 360" role="img" aria-labelledby="theorySvgTitle theorySvgDesc">
-                <title id="theorySvgTitle">懸臂尺從彎曲、加速到形成模態的三步示意</title>
-                <desc id="theorySvgDesc">目前顯示第1步：手向下壓自由端，尺的彎曲與回復作用增加。</desc>
-                <defs>
-                  <linearGradient id="storyBeamGradient" x1="0" x2="1"><stop stop-color="#18e299"/><stop offset="1" stop-color="#7fffd0"/></linearGradient>
-                  <marker id="storyArrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#ffcf70"/></marker>
-                  <marker id="storyArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#18e299"/></marker>
-                  <marker id="storyArrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#79baff"/></marker>
-                </defs>
-                <rect class="story-grid-bg" x="0" y="0" width="760" height="360" rx="22"/>
-                <line class="story-reference" x1="92" y1="170" x2="704" y2="170"/>
-                <g class="story-clamp"><rect x="42" y="98" width="50" height="144" rx="6"/><line x1="54" y1="108" x2="82" y2="132"/><line x1="54" y1="138" x2="82" y2="162"/><line x1="54" y1="168" x2="82" y2="192"/><line x1="54" y1="198" x2="82" y2="222"/></g>
-
-                <g data-theory-visual="1">
-                  <path id="storyBeam1" class="story-beam" d="M92 170 C280 170 510 182 704 230"/>
-                  <line id="storyPressArrow" class="story-force-arrow" x1="704" y1="90" x2="704" y2="205" marker-end="url(#storyArrowAmber)"/>
-                  <text class="story-svg-label" x="704" y="76" text-anchor="end">手向下壓</text>
-                  <path class="story-return-arrow" d="M560 222 Q610 187 648 180" marker-end="url(#storyArrowGreen)"/>
-                  <text class="story-svg-label story-green" x="704" y="276" text-anchor="end">彈性想把尺拉回</text>
-                  <text class="story-svg-note" x="104" y="324">彎曲越明顯，內部彎矩越大</text>
-                </g>
-
-                <g data-theory-visual="2" hidden>
-                  <path id="storyBeam2" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
-                  <g id="storyMassLayer" aria-hidden="true"></g>
-                  <line id="storyAccelArrow" class="story-accel-arrow" x1="520" y1="235" x2="520" y2="178" marker-end="url(#storyArrowBlue)"/>
-                  <text class="story-svg-label" x="704" y="76" text-anchor="end">藍箭頭：淨力／加速度方向</text>
-                  <text class="story-svg-note" x="104" y="324">每一小段都有彈性，也都有質量</text>
-                </g>
-
-                <g data-theory-visual="3" hidden>
-                  <path id="storyModeEnvelope" class="story-mode-envelope" d="M92 170 C280 170 510 182 704 218"/>
-                  <path id="storyBeam3" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
-                  <circle class="boundary-dot fixed" cx="92" cy="170" r="10"/>
-                  <circle class="boundary-dot free" cx="704" cy="170" r="10"/>
-                  <text class="story-svg-label" x="102" y="78">固定端：不能移動、不能轉動</text>
-                  <text class="story-svg-label" x="704" y="292" text-anchor="end">自由端：彎矩與剪力為0</text>
-                  <text class="story-svg-note" x="104" y="252">虛線：第一模態最大位移形狀</text>
-                  <g class="mode-tags"><text x="104" y="326">圖中只畫第1模態：β₁=1.875</text></g>
-                </g>
-              </svg>
-              <p id="theoryVisualCaption" class="story-caption"><b>第1步：</b>先把自由端向下壓。彎曲是被視覺放大的概念示意。</p>
-            </div>
           </section>
 
           <section class="formula-map" aria-labelledby="formula-map-title">
