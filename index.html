@@ -90,9 +90,11 @@
 
           <section class="theory-story" aria-labelledby="story-title">
             <div class="story-copy">
-              <p class="tech-label">90-SECOND VISUAL GUIDE</p>
-              <h3 id="story-title">先看尺怎麼動，再讀公式</h3>
-              <p class="story-intro">按1、2、3逐步閱讀，或讓動畫自動播放。圖中的位移與時間都經過視覺放大，重點是因果關係，不是實際比例。</p>
+              <div class="story-heading">
+                <p class="tech-label">90-SECOND VISUAL GUIDE</p>
+                <h3 id="story-title">先看尺怎麼動，再讀公式</h3>
+                <p class="story-intro">按1、2、3逐步閱讀，或讓動畫自動播放。圖中的位移與時間都經過視覺放大，重點是因果關係，不是實際比例。</p>
+              </div>
 
               <div class="story-tabs" role="tablist" aria-label="懸臂梁頻率公式三步講解">
                 <button id="story-tab-1" type="button" role="tab" aria-selected="true" aria-controls="story-panel-1" tabindex="0" data-theory-step="1"><b>1</b><span>壓彎</span></button>
@@ -101,7 +103,7 @@
               </div>
 
               <div class="story-panels">
-                <section id="story-panel-1" class="story-panel" role="tabpanel" aria-labelledby="story-tab-1" data-theory-panel="1">
+                <section id="story-panel-1" class="story-panel" role="tabpanel" tabindex="0" aria-labelledby="story-tab-1" data-theory-panel="1">
                   <p class="student-question">想像一下：塑膠尺彎得越厲害，手感是不是越「硬」、越想彈回來？</p>
                   <h4>第1步：把「彎曲」翻成回復作用</h4>
                   <p>用 <i>w(x,t)</i> 表示尺在位置 <i>x</i>、時間 <i>t</i> 的上下位移。曲線彎得多不多，可用它對位置的二階變化表示。材料越硬（<i>E</i>大）、截面越難彎（<i>I</i>大），內部彈性彎矩就越大。</p>
@@ -110,7 +112,7 @@
                   <p class="step-takeaway"><strong>這一步得到：</strong>知道尺為什麼有回復作用，但還不知道它會以多快的速度振動。</p>
                 </section>
 
-                <section id="story-panel-2" class="story-panel" role="tabpanel" aria-labelledby="story-tab-2" data-theory-panel="2" hidden>
+                <section id="story-panel-2" class="story-panel" role="tabpanel" tabindex="0" aria-labelledby="story-tab-2" data-theory-panel="2" hidden>
                   <p class="student-question">放手後，尺為什麼不會停在原位，而是衝過平衡位置、來回擺動？</p>
                   <h4>第2步：對每一小段使用 F = ma</h4>
                   <p>相鄰小段的彎矩不完全一樣，會先形成剪力；相鄰位置的剪力再有差異，才造成某一小段的淨力。每一小段又有質量，所以淨力使它產生上下加速度；它衝過平衡位置則是慣性的結果。</p>
@@ -120,7 +122,7 @@
                   <p class="step-takeaway"><strong>這一步得到：</strong>有了描述整把尺如何運動的方程，但它仍允許很多種數學解。</p>
                 </section>
 
-                <section id="story-panel-3" class="story-panel" role="tabpanel" aria-labelledby="story-tab-3" data-theory-panel="3" hidden>
+                <section id="story-panel-3" class="story-panel" role="tabpanel" tabindex="0" aria-labelledby="story-tab-3" data-theory-panel="3" hidden>
                   <p class="student-question">吉他弦不是任何頻率都能形成穩定駐波；一端固定的尺也一樣。</p>
                   <h4>第3步：用兩端限制篩選「允許的形狀」</h4>
                   <p>桌邊的固定端既不能上下移動，也不能轉動；自由端沒有外加彎矩與剪力。只有同時滿足這四項條件的振動形狀能長久存在，我們稱它們為模態。</p>
@@ -160,7 +162,7 @@
                   <line id="storyPressArrow" class="story-force-arrow" x1="704" y1="90" x2="704" y2="205" marker-end="url(#storyArrowAmber)"/>
                   <text class="story-svg-label" x="704" y="76" text-anchor="end">手向下壓</text>
                   <path class="story-return-arrow" d="M560 222 Q610 187 648 180" marker-end="url(#storyArrowGreen)"/>
-                  <text class="story-svg-label story-green" x="472" y="276">彈性想把尺拉回</text>
+                  <text class="story-svg-label story-green" x="704" y="276" text-anchor="end">彈性想把尺拉回</text>
                   <text class="story-svg-note" x="104" y="324">彎曲越明顯，內部彎矩越大</text>
                 </g>
 
@@ -178,9 +180,9 @@
                   <circle class="boundary-dot fixed" cx="92" cy="170" r="10"/>
                   <circle class="boundary-dot free" cx="704" cy="170" r="10"/>
                   <text class="story-svg-label" x="102" y="78">固定端：不能移動、不能轉動</text>
-                  <text class="story-svg-label" x="398" y="292">自由端：彎矩與剪力為0</text>
+                  <text class="story-svg-label" x="704" y="292" text-anchor="end">自由端：彎矩與剪力為0</text>
                   <text class="story-svg-note" x="104" y="252">虛線：第一模態最大位移形狀</text>
-                  <g class="mode-tags"><text x="186" y="326">β₁=1.875</text><text x="366" y="326">β₂=4.694</text><text x="546" y="326">β₃=7.855</text></g>
+                  <g class="mode-tags"><text x="104" y="326">圖中只畫第1模態：β₁=1.875</text></g>
                 </g>
               </svg>
               <p id="theoryVisualCaption" class="story-caption"><b>第1步：</b>先把自由端向下壓。彎曲是被視覺放大的概念示意。</p>

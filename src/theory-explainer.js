@@ -46,13 +46,15 @@ export function initTheoryExplainer() {
   const description = document.querySelector('#theorySvgDesc');
   const autoButton = document.querySelector('#theoryAuto');
   const motionButton = document.querySelector('#theoryMotion');
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   const massLayer = document.querySelector('#storyMassLayer');
 
   let step = 1;
-  let motionRunning = !prefersReducedMotion;
+  let motionRunning = !reducedMotionQuery.matches;
   let autoPlaying = false;
+  let motionBeforeAutoplay = motionRunning;
   let phase = 0.8;
+  let currentOscillation = Math.sin(phase);
   let previousTime = performance.now();
   let lastStepChange = previousTime;
 
@@ -65,8 +67,14 @@ export function initTheoryExplainer() {
   });
   document.querySelector('#storyModeEnvelope').setAttribute('d', makePath(1, 48));
 
+  const updateButtons = () => {
+    autoButton.textContent = autoPlaying ? '停止自動播放' : '自動播放三步';
+    motionButton.textContent = motionRunning ? '暫停示意' : '播放示意';
+  };
+
   const publishState = () => {
     window.__THEORY_EXPLAINER__ = {
+      initialized: true,
       step,
       motionRunning,
       autoPlaying,
@@ -76,27 +84,65 @@ export function initTheoryExplainer() {
     };
   };
 
-  function stopAuto() {
+  function stopAuto({ restoreMotion = false } = {}) {
+    if (!autoPlaying) return false;
     autoPlaying = false;
-    autoButton.textContent = '自動播放三步';
+    if (restoreMotion) motionRunning = motionBeforeAutoplay;
+    updateButtons();
+    previousTime = performance.now();
+    return true;
   }
 
-  function setMotion(next) {
-    motionRunning = next;
-    if (!next) stopAuto();
-    motionButton.textContent = motionRunning ? '暫停示意' : '播放示意';
-    if (!motionRunning) drawFrame();
+  function setMotion(next, { announce = true } = {}) {
+    const wasAutoPlaying = autoPlaying;
+    motionRunning = Boolean(next);
+    if (!motionRunning && autoPlaying) autoPlaying = false;
+    updateButtons();
+    previousTime = performance.now();
+    drawFrame();
+    if (announce) {
+      status.textContent = motionRunning
+        ? '示意動畫已播放。'
+        : wasAutoPlaying
+          ? '示意動畫與三步自動播放已暫停。'
+          : '示意動畫已暫停。';
+    }
+    publishState();
+  }
+
+  function setAutoplay(next) {
+    if (next) {
+      motionBeforeAutoplay = motionRunning;
+      autoPlaying = true;
+      motionRunning = true;
+      lastStepChange = performance.now();
+      previousTime = lastStepChange;
+      updateButtons();
+      status.textContent = '三步自動播放已開始。';
+    } else {
+      autoPlaying = false;
+      motionRunning = motionBeforeAutoplay;
+      previousTime = performance.now();
+      updateButtons();
+      drawFrame();
+      status.textContent = motionRunning
+        ? '三步自動播放已停止；示意動畫繼續播放。'
+        : '三步自動播放已停止；示意動畫已恢復暫停。';
+    }
     publishState();
   }
 
   function setStep(nextStep, { focus = false, announce = true, manual = false } = {}) {
-    step = Math.max(1, Math.min(3, Number(nextStep)));
-    if (manual) stopAuto();
+    const normalizedStep = Number(nextStep);
+    if (!Number.isInteger(normalizedStep) || normalizedStep < 1 || normalizedStep > 3) return false;
+    const focusWasInTabs = tabs.includes(document.activeElement);
+    step = normalizedStep;
+    if (manual) stopAuto({ restoreMotion: true });
     tabs.forEach((tab) => {
       const selected = Number(tab.dataset.theoryStep) === step;
       tab.setAttribute('aria-selected', String(selected));
       tab.tabIndex = selected ? 0 : -1;
-      if (selected && focus) tab.focus();
+      if (selected && (focus || focusWasInTabs)) tab.focus();
     });
     panels.forEach((panel) => { panel.hidden = Number(panel.dataset.theoryPanel) !== step; });
     visuals.forEach((visual) => { visual.toggleAttribute('hidden', Number(visual.dataset.theoryVisual) !== step); });
@@ -106,35 +152,37 @@ export function initTheoryExplainer() {
     lastStepChange = performance.now();
     drawFrame();
     publishState();
+    return true;
   }
 
   function drawFrame() {
     if (step === 1) {
-      const amount = motionRunning ? 0.56 + 0.18 * Math.sin(phase) : 0.68;
+      const amount = 0.56 + 0.18 * currentOscillation;
       const deflection = 96 * amount;
       document.querySelector('#storyBeam1').setAttribute('d', `M92 170 C270 170 500 ${170 + deflection * 0.24} 704 ${170 + deflection}`);
       document.querySelector('#storyPressArrow').setAttribute('y2', String(170 + deflection - 20));
       return;
     }
 
-    const oscillation = motionRunning ? Math.sin(phase) : 0.62;
     if (step === 2) {
-      document.querySelector('#storyBeam2').setAttribute('d', makePath(oscillation, 52));
+      document.querySelector('#storyBeam2').setAttribute('d', makePath(currentOscillation, 52));
       massDots.forEach((dot, index) => {
         const u = (index + 1) / (massDots.length + 1);
         dot.setAttribute('cx', String(92 + 612 * u));
-        dot.setAttribute('cy', String(170 + 52 * cantileverModeShape(u, 1) * oscillation));
+        dot.setAttribute('cy', String(170 + 52 * cantileverModeShape(u, 1) * currentOscillation));
       });
-      const beamY = 170 + 52 * cantileverModeShape(0.7, 1) * oscillation;
-      const direction = oscillation >= 0 ? 1 : -1;
+      const beamY = 170 + 52 * cantileverModeShape(0.7, 1) * currentOscillation;
+      const magnitude = Math.abs(currentOscillation);
+      const direction = currentOscillation >= 0 ? 1 : -1;
       const arrow = document.querySelector('#storyAccelArrow');
-      arrow.setAttribute('y1', String(beamY + direction * 72));
+      arrow.setAttribute('y1', String(beamY + direction * (12 + 60 * magnitude)));
       arrow.setAttribute('y2', String(beamY + direction * 12));
+      arrow.style.opacity = String(Math.min(1, magnitude * 1.8));
       return;
     }
 
-    document.querySelector('#storyBeam3').setAttribute('d', makePath(oscillation, 48));
-    document.querySelector('.boundary-dot.free').setAttribute('cy', String(170 + 48 * oscillation));
+    document.querySelector('#storyBeam3').setAttribute('d', makePath(currentOscillation, 48));
+    document.querySelector('.boundary-dot.free').setAttribute('cy', String(170 + 48 * currentOscillation));
   }
 
   tabs.forEach((tab, index) => {
@@ -143,36 +191,40 @@ export function initTheoryExplainer() {
       const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
       if (!keys.includes(event.key)) return;
       event.preventDefault();
+      const focusedIndex = tabs.indexOf(event.currentTarget);
       const next = event.key === 'Home' ? 1
-        : event.key === 'End' ? 3
-          : event.key === 'ArrowRight' ? (step % 3) + 1
-            : ((step + 1) % 3) + 1;
+        : event.key === 'End' ? tabs.length
+          : event.key === 'ArrowRight' ? ((focusedIndex + 1) % tabs.length) + 1
+            : ((focusedIndex - 1 + tabs.length) % tabs.length) + 1;
       setStep(next, { focus: true, manual: true });
     });
   });
 
-  autoButton.addEventListener('click', () => {
-    if (autoPlaying) {
-      stopAuto();
-      status.textContent = '三步自動播放已停止。';
-    } else {
-      autoPlaying = true;
-      motionRunning = true;
-      autoButton.textContent = '停止自動播放';
-      motionButton.textContent = '暫停示意';
-      lastStepChange = performance.now();
-      status.textContent = '三步自動播放已開始。';
-    }
-    publishState();
-  });
-
+  autoButton.addEventListener('click', () => setAutoplay(!autoPlaying));
   motionButton.addEventListener('click', () => setMotion(!motionRunning));
+
+  const handleReducedMotionChange = (event) => {
+    if (!event.matches) return;
+    autoPlaying = false;
+    motionRunning = false;
+    updateButtons();
+    previousTime = performance.now();
+    drawFrame();
+    status.textContent = '系統已切換為減少動態；示意動畫與自動播放已暫停。';
+    publishState();
+  };
+  if (typeof reducedMotionQuery.addEventListener === 'function') {
+    reducedMotionQuery.addEventListener('change', handleReducedMotionChange);
+  } else {
+    reducedMotionQuery.addListener(handleReducedMotionChange);
+  }
 
   function tick(now) {
     const dt = Math.min(0.05, (now - previousTime) / 1000);
     previousTime = now;
     if (motionRunning) {
       phase += dt * 1.9;
+      currentOscillation = Math.sin(phase);
       drawFrame();
     }
     if (autoPlaying && now - lastStepChange >= 4800) {
@@ -182,7 +234,7 @@ export function initTheoryExplainer() {
   }
 
   setStep(1, { announce: false });
-  setMotion(motionRunning);
+  setMotion(motionRunning, { announce: false });
   requestAnimationFrame(tick);
   return { getState: () => ({ step, motionRunning, autoPlaying }) };
 }

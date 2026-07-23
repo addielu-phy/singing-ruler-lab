@@ -51,6 +51,9 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
         const box = label.getBBox();
         return { text: label.textContent, x: box.x, y: box.y, right: box.x + box.width, bottom: box.y + box.height };
       }).filter((box) => box.x < -1 || box.y < -1 || box.right > 761 || box.bottom > 361);
+      const tabsRect = document.querySelector('.story-tabs').getBoundingClientRect();
+      const visualRect = document.querySelector('.story-visual').getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
       return {
         step,
         visiblePanels: [...document.querySelectorAll('[data-theory-panel]')].filter((x) => !x.hidden).length,
@@ -58,8 +61,11 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
         selectedTabs: [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].length,
         panelOverflow: panel.scrollWidth > panel.clientWidth + 1,
         formulaOverflow: [...panel.querySelectorAll('.formula')].some((x) => x.scrollWidth > x.clientWidth + 1),
-        minLabelHeight: Math.min(...labels.map((x) => x.getBoundingClientRect().height)),
+        labelCount: labels.length,
+        minLabelHeight: labels.length ? Math.min(...labels.map((x) => x.getBoundingClientRect().height)) : 0,
         clippedLabels,
+        panelFocusable: panel.tabIndex === 0,
+        mobileVisualBetweenTabsAndPanel: !mobile || (visualRect.top >= tabsRect.bottom - 1 && visualRect.bottom <= panelRect.top + 1),
       };
     });
     theoryApi?.setStep(1);
@@ -100,8 +106,12 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
     assert.equal(step.selectedTabs, 1, `${label}: step ${step.step} has one selected tab`);
     assert.equal(step.panelOverflow, false, `${label}: step ${step.step} panel overflow`);
     assert.equal(step.formulaOverflow, false, `${label}: step ${step.step} formula overflow`);
-    assert.ok(step.minLabelHeight >= 10, `${label}: step ${step.step} SVG labels readable (${step.minLabelHeight}px)`);
+    assert.ok(step.labelCount > 0, `${label}: step ${step.step} has SVG labels`);
+    const minimumLabelHeight = mobile ? 13 : 10;
+    assert.ok(step.minLabelHeight >= minimumLabelHeight, `${label}: step ${step.step} SVG labels readable (${step.minLabelHeight}px)`);
     assert.deepEqual(step.clippedLabels, [], `${label}: step ${step.step} SVG labels clipped`);
+    assert.equal(step.panelFocusable, true, `${label}: step ${step.step} tabpanel is keyboard-focusable`);
+    assert.equal(step.mobileVisualBetweenTabsAndPanel, true, `${label}: step ${step.step} mobile visual follows tabs before panel`);
   });
   assert.ok(result.formulaCount >= 14, `${label}: formula count`);
   assert.equal(result.mathLabelsValid, true, `${label}: complete Traditional Chinese math labels`);
@@ -143,23 +153,55 @@ async function interactionChecks(page) {
   await page.locator('#story-tab-2').click();
   assert.equal(await page.locator('#story-tab-2').getAttribute('aria-selected'), 'true', 'theory tab click selects step 2');
   assert.equal(await page.locator('#story-panel-2').isVisible(), true, 'theory step 2 panel visible');
+  for (let sampleIndex = 0; sampleIndex < 8; sampleIndex += 1) {
+    const sample = await page.evaluate(() => {
+      const beam = document.querySelector('#storyBeam2');
+      const tip = beam.getPointAtLength(beam.getTotalLength());
+      const arrow = document.querySelector('#storyAccelArrow');
+      return {
+        displacement: tip.y - 170,
+        arrowDirection: Number(arrow.getAttribute('y2')) - Number(arrow.getAttribute('y1')),
+        opacity: Number(getComputedStyle(arrow).opacity),
+      };
+    });
+    if (sample.opacity > 0.05 && Math.abs(sample.displacement) > 0.5) {
+      assert.ok(sample.displacement * sample.arrowDirection < 0, 'step 2 acceleration arrow opposes displacement');
+    }
+    await page.waitForTimeout(45);
+  }
   await page.keyboard.press('ArrowRight');
   assert.equal(await page.evaluate(() => document.activeElement?.id), 'story-tab-3', 'theory tabs support ArrowRight focus');
   assert.equal(await page.locator('#story-tab-3').getAttribute('aria-selected'), 'true', 'ArrowRight selects theory step 3');
   assert.match(await page.locator('#theorySvgDesc').textContent(), /第3步.*模態/, 'SVG description follows selected theory step');
-  await page.locator('#theoryMotion').click();
-  const theoryPaused1 = await page.locator('#storyBeam3').getAttribute('d');
+  const pauseTransition = await page.evaluate(() => {
+    const beam = document.querySelector('#storyBeam3');
+    const before = beam.getAttribute('d');
+    document.querySelector('#theoryMotion').click();
+    return { before, after: beam.getAttribute('d') };
+  });
+  assert.equal(pauseTransition.after, pauseTransition.before, 'theory pause freezes the current frame without a jump');
   await page.waitForTimeout(250);
-  const theoryPaused2 = await page.locator('#storyBeam3').getAttribute('d');
-  assert.equal(theoryPaused1, theoryPaused2, 'theory pause keeps visual state stable');
+  const theoryPausedLater = await page.locator('#storyBeam3').getAttribute('d');
+  assert.equal(theoryPausedLater, pauseTransition.after, 'theory pause keeps visual state stable');
   assert.equal(await page.locator('#theoryMotion').textContent(), '播放示意', 'theory pause action label updates');
   await page.locator('#theoryMotion').click();
   await page.locator('#theoryAuto').click();
   assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.autoPlaying), true, 'theory autoplay starts');
-  await page.waitForTimeout(5000);
-  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.step), 1, 'theory autoplay advances from step 3 to step 1');
+  await page.locator('#story-tab-3').focus();
+  await page.waitForFunction(() => window.__THEORY_EXPLAINER__.step === 1, null, { timeout: 6000 });
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'story-tab-1', 'autoplay keeps focused tab synchronized with selection');
+  await page.locator('#theoryMotion').click();
+  assert.equal(await page.evaluate(() => !window.__THEORY_EXPLAINER__.autoPlaying && !window.__THEORY_EXPLAINER__.motionRunning), true, 'manual pause also stops autoplay');
+  assert.match(await page.locator('#theoryStatus').textContent(), /暫停/, 'manual pause announces the combined stopped state');
+  await page.locator('#theoryMotion').click();
   await page.locator('#theoryAuto').click();
-  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.autoPlaying), false, 'theory autoplay stops');
+  await page.locator('#theoryAuto').click();
+  assert.equal(await page.evaluate(() => !window.__THEORY_EXPLAINER__.autoPlaying && window.__THEORY_EXPLAINER__.motionRunning), true, 'stopping autoplay restores the prior running motion state');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => !window.__THEORY_EXPLAINER__.motionRunning, null, { timeout: 1000 });
+  assert.match(await page.locator('#theoryStatus').textContent(), /減少動態/, 'live reduced-motion preference change is announced');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.motionRunning), false, 'leaving reduced motion does not unexpectedly restart animation');
 
   const base = await getFrequency();
   await setRange('length', 12);
@@ -238,7 +280,7 @@ async function interactionChecks(page) {
   const labTop = await page.locator('#lab').evaluate((x) => x.getBoundingClientRect().top);
   assert.ok(labTop >= headerHeight - 1, 'hash target clears sticky header');
 
-  report.interactions = { theoryTabs: true, theoryKeyboard: true, theoryPauseStable: true, theoryAutoplay: true, baseHz: base, doubledLengthHz: doubledLength, doubledThicknessHz: doubledThickness, secondModeHz: secondMode, rotaryRitzHz: corrected, liveResult: true, audioPlayback: true, audioStopStable: true, pauseStable: true, skipFocus: true, hashFocus: true };
+  report.interactions = { theoryTabs: true, theoryKeyboard: true, theoryFocusSync: true, theoryForceDirection: true, theoryPauseStable: true, theoryAutoplay: true, theoryLivePreferenceChange: true, baseHz: base, doubledLengthHz: doubledLength, doubledThicknessHz: doubledThickness, secondModeHz: secondMode, rotaryRitzHz: corrected, liveResult: true, audioPlayback: true, audioStopStable: true, pauseStable: true, skipFocus: true, hashFocus: true };
 }
 
 try {
@@ -270,8 +312,11 @@ try {
   await reducedPage.locator('#theoryAuto').click();
   assert.equal(await reducedPage.evaluate(() => window.__THEORY_EXPLAINER__.autoPlaying && window.__THEORY_EXPLAINER__.motionRunning), true, 'explicit theory autoplay overrides reduced motion');
   await reducedPage.locator('#theoryAuto').click();
-  await reducedPage.locator('#theoryMotion').click();
-  assert.equal(await reducedPage.evaluate(() => window.__THEORY_EXPLAINER__.motionRunning), false, 'theory animation can be paused again');
+  assert.equal(await reducedPage.evaluate(() => !window.__THEORY_EXPLAINER__.autoPlaying && !window.__THEORY_EXPLAINER__.motionRunning), true, 'stopping autoplay restores reduced-motion pause');
+  const reducedStopped1 = await reducedPage.locator('#storyBeam1').getAttribute('d');
+  await reducedPage.waitForTimeout(250);
+  const reducedStopped2 = await reducedPage.locator('#storyBeam1').getAttribute('d');
+  assert.equal(reducedStopped1, reducedStopped2, 'reduced-motion visual stays still after autoplay stops');
   report.interactions.reducedMotionStartsPaused = true;
   report.interactions.reducedMotionTheoryOptIn = true;
   await reduced.close();
