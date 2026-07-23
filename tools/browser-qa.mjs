@@ -1,0 +1,219 @@
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const axeSource = await fs.readFile(require.resolve('axe-core/axe.min.js'), 'utf8');
+
+const baseURL = process.env.BASE_URL || 'http://127.0.0.1:9057/';
+const outDir = process.env.QA_DIR || 'qa';
+await fs.mkdir(outDir, { recursive: true });
+const report = { url: baseURL, viewports: {}, interactions: {}, axe: {} };
+const browser = await chromium.launch({ headless: true });
+
+async function loadPage(context, label) {
+  const page = await context.newPage();
+  const errors = [];
+  page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console: ${msg.text()}`); });
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+  const response = await page.goto(baseURL, { waitUntil: 'networkidle' });
+  assert.equal(response.status(), 200, `${label}: HTTP status`);
+  assert.equal(await page.title(), '會唱歌的尺｜懸臂梁振動理論與互動實驗');
+  await page.waitForFunction(() => document.documentElement.dataset.ready === 'true');
+  assert.deepEqual(errors, [], `${label}: JavaScript errors`);
+  return { page, errors };
+}
+
+async function structuralChecks(page, label, expectedWidth, mobile) {
+  await page.locator('#reset').focus();
+  const result = await page.evaluate(({ expectedWidth, mobile }) => {
+    const theory = document.querySelector('#theory');
+    const lab = document.querySelector('#lab');
+    const formulas = [...document.querySelectorAll('[role="math"]')];
+    const unnamedAsides = [...document.querySelectorAll('aside')].filter((x) => !x.getAttribute('aria-label') && !x.getAttribute('aria-labelledby'));
+    const luminance = (color) => {
+      const rgb = color.match(/\d+/g).slice(0, 3).map(Number).map((value) => {
+        const channel = value / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    };
+    const focusColor = getComputedStyle(document.querySelector('#reset')).outlineColor;
+    const focusContrast = (luminance('rgb(255,255,255)') + 0.05) / (luminance(focusColor) + 0.05);
+    return {
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      theoryBeforeLab: Boolean(theory.compareDocumentPosition(lab) & Node.DOCUMENT_POSITION_FOLLOWING),
+      formulaCount: formulas.length,
+      mathLabelsValid: formulas.every((x) => (x.getAttribute('aria-label') || '').length >= 18 && /[一二三四五六七八九十等於乘除平方根加負]/.test(x.getAttribute('aria-label'))),
+      unnamedAsides: unnamedAsides.length,
+      details: [...document.querySelectorAll('.deep-dive')].map((x) => x.open),
+      customHidden: document.querySelector('.custom-material').hidden && getComputedStyle(document.querySelector('.custom-material')).display === 'none',
+      ranges: [...document.querySelectorAll('input[type="range"]')].map((x) => ({ id: x.id, height: x.getBoundingClientRect().height, aria: x.getAttribute('aria-valuetext') })),
+      targetSizes: [...document.querySelectorAll('button, select, input:not([disabled]), summary, .button, .nav-cta')].filter((x) => !x.closest('[hidden]')).map((x) => ({ label: x.id || x.textContent.trim().slice(0, 30), w: x.getBoundingClientRect().width, h: x.getBoundingClientRect().height })).filter((x) => x.w < 44 || x.h < 44),
+      mainReady: Boolean(window.__SINGING_RULER__?.snapshot?.frequencyHz),
+      mainFocusable: document.querySelector('#main').tabIndex === -1,
+      liveResult: document.querySelector('#resultAnnouncement')?.getAttribute('role') === 'status',
+      forceText: document.querySelector('#forceMetric')?.textContent,
+      chartTextHeight: document.querySelector('.chart-text')?.getBoundingClientRect().height || 0,
+      rulerLabelHeight: document.querySelector('.svg-label')?.getBoundingClientRect().height || 0,
+      chartIsEbBaseline: document.querySelector('.chart-heading h3')?.textContent.includes('EB基準'),
+      focusColor,
+      focusContrast,
+      expectedWidth,
+      mobile,
+    };
+  }, { expectedWidth, mobile });
+  assert.equal(result.clientWidth, expectedWidth, `${label}: exact viewport`);
+  assert.equal(result.scrollWidth, expectedWidth, `${label}: page horizontal overflow`);
+  assert.equal(result.theoryBeforeLab, true, `${label}: theory before lab`);
+  assert.ok(result.formulaCount >= 14, `${label}: formula count`);
+  assert.equal(result.mathLabelsValid, true, `${label}: complete Traditional Chinese math labels`);
+  assert.equal(result.unnamedAsides, 0, `${label}: unnamed complementary landmarks`);
+  assert.equal(result.customHidden, true, `${label}: hidden custom controls`);
+  assert.equal(result.mainReady, true, `${label}: app ready API`);
+  assert.equal(result.mainFocusable, true, `${label}: skip-link target focusable`);
+  assert.equal(result.liveResult, true, `${label}: live calculation summary`);
+  assert.equal(result.forceText, '4.19', `${label}: default 5 mm release force`);
+  assert.equal(result.chartIsEbBaseline, true, `${label}: length chart explicitly EB-only`);
+  assert.ok(result.focusContrast >= 3, `${label}: focus indicator contrast ${result.focusContrast}`);
+  if (mobile) {
+    assert.ok(result.chartTextHeight >= 10, `${label}: chart text readable (${result.chartTextHeight}px)`);
+    assert.ok(result.rulerLabelHeight >= 10, `${label}: ruler labels readable (${result.rulerLabelHeight}px)`);
+  }
+  assert.equal(result.details.every((v) => v === !mobile), true, `${label}: responsive theory disclosure state`);
+  assert.equal(result.ranges.every((x) => x.height >= 44 && x.aria), true, `${label}: range size and localized aria-valuetext`);
+  assert.deepEqual(result.targetSizes, [], `${label}: undersized targets`);
+
+  await page.evaluate(() => document.querySelectorAll('.deep-dive').forEach((x) => { x.open = true; }));
+  const overflow = await page.evaluate(() => [...document.querySelectorAll('.formula, blockquote, .symbol-grid > div, .worked-example code, .mode-table')]
+    .filter((x) => x.getClientRects().length)
+    .map((x) => ({ text: x.textContent.trim().slice(0, 45), clientWidth: x.clientWidth, scrollWidth: x.scrollWidth }))
+    .filter((x) => x.scrollWidth > x.clientWidth + 1));
+  assert.deepEqual(overflow, [], `${label}: dense content overflow`);
+
+  await page.evaluate(axeSource);
+  const axe = await page.evaluate(async () => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } }));
+  assert.deepEqual(axe.violations, [], `${label}: axe violations ${JSON.stringify(axe.violations.map((x) => x.id))}`);
+  report.axe[label] = { violations: 0, incomplete: axe.incomplete.map((x) => ({ id: x.id, nodes: x.nodes.length })) };
+  report.viewports[label] = result;
+}
+
+async function interactionChecks(page) {
+  const getFrequency = () => page.locator('#frequencyMetric').textContent().then((x) => Number(x.replace(/,/g, '')));
+  const setRange = async (id, value) => {
+    await page.locator(`#${id}`).evaluate((el, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, value);
+  };
+  const base = await getFrequency();
+  await setRange('length', 12);
+  const doubledLength = await getFrequency();
+  assert.ok(Math.abs(doubledLength / base - 0.25) < 0.001, 'L doubled -> f quarter');
+  await page.waitForTimeout(360);
+  assert.match(await page.locator('#resultAnnouncement').textContent(), /27\.55.*赫茲/, 'live result announces recalculated frequency');
+  await setRange('length', 6);
+  await setRange('thickness', 1);
+  const doubledThickness = await getFrequency();
+  assert.ok(Math.abs(doubledThickness / base - 2) < 0.001, 'h doubled -> f doubled');
+  await setRange('thickness', 0.5);
+  await setRange('width', 60);
+  const doubledWidth = await getFrequency();
+  assert.ok(Math.abs(doubledWidth / base - 1) < 0.001, 'width cancels');
+  await setRange('amplitude', 20);
+  const changedAmplitude = await getFrequency();
+  assert.ok(Math.abs(changedAmplitude / base - 1) < 0.001, 'amplitude does not change eigenfrequency');
+  await page.locator('#mode').selectOption('2');
+  const secondMode = await getFrequency();
+  assert.ok(Math.abs(secondMode / base - 6.2669) < 0.002, 'second mode ratio');
+  assert.equal(await page.locator('#workedModeLabel').textContent(), '代入第2模態', 'worked-example label follows selected mode');
+  assert.match(await page.locator('#workedSubstitution').textContent(), /模態2/, 'worked-example value follows selected mode');
+  await page.locator('#mode').selectOption('1');
+  await page.locator('#model').selectOption('rotary-ritz');
+  const correctedExact = await page.evaluate(() => ({
+    corrected: window.__SINGING_RULER__.snapshot.frequencyHz,
+    eb: window.__SINGING_RULER__.snapshot.ebFrequencyHz,
+    q: window.__SINGING_RULER__.snapshot.rotaryCoefficientQ,
+  }));
+  const corrected = correctedExact.corrected;
+  assert.ok(correctedExact.corrected < correctedExact.eb, 'Rayleigh–Ritz rotary correction lowers frequency');
+  assert.ok(Math.abs(correctedExact.q - 4.647778318679) < 1e-10, 'Rayleigh–Ritz uses integrated Q1');
+  assert.match(await page.locator('#slopeLabel').textContent(), /^EB斜率/, 'chart slope remains EB baseline');
+  assert.match(await page.locator('#chartDesc').textContent(), /固定使用Euler–Bernoulli模型/, 'chart description remains EB baseline');
+  await page.locator('#model').selectOption('eb');
+  await page.locator('#material').selectOption('custom');
+  assert.equal(await page.locator('.custom-material').isVisible(), true, 'custom material controls visible');
+  assert.equal(await page.locator('#young').isEnabled(), true);
+  await page.locator('#material').selectOption('stainless');
+  assert.equal(await page.locator('.custom-material').isHidden(), true, 'custom material controls hidden');
+
+  await page.locator('#reset').click();
+  assert.ok(Math.abs((await getFrequency()) - 110.20) < 0.01, 'reset restores default');
+  assert.equal(await page.locator('#forceMetric').textContent(), '4.19', '5 mm release force is correct');
+  await page.locator('#playTone').click();
+  await page.waitForFunction(() => document.querySelector('#audioStatus').textContent.includes('已播放'), null, { timeout: 3000 });
+  assert.match(await page.locator('#audioStatus').textContent(), /110\.20 Hz/, 'Web Audio plays the theoretical default tone');
+  await page.locator('#playTone').click();
+  await page.waitForTimeout(100);
+  await page.locator('#stopTone').click();
+  await page.waitForTimeout(1350);
+  assert.match(await page.locator('#audioStatus').textContent(), /^聲音已停止/, 'manual stop status is not overwritten by oscillator ended event');
+  const pathBefore = await page.locator('#rulerPath').getAttribute('d');
+  await page.locator('#toggleMotion').click();
+  await page.waitForTimeout(250);
+  const pathPaused1 = await page.locator('#rulerPath').getAttribute('d');
+  await page.waitForTimeout(250);
+  const pathPaused2 = await page.locator('#rulerPath').getAttribute('d');
+  assert.equal(pathPaused1, pathPaused2, 'pause keeps visual state stable');
+  assert.notEqual(pathBefore, '', 'ruler path exists');
+
+  await page.locator('.skip-link').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(50);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'main', 'skip link moves focus to main');
+
+  await page.locator('a[href="#lab"]').first().click();
+  await page.waitForFunction(() => {
+    const header = document.querySelector('.site-header').getBoundingClientRect().height;
+    const top = document.querySelector('#lab').getBoundingClientRect().top;
+    return top >= header - 1;
+  }, null, { timeout: 2500 });
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'lab', 'hash navigation moves focus');
+  const headerHeight = await page.locator('.site-header').evaluate((x) => x.getBoundingClientRect().height);
+  const labTop = await page.locator('#lab').evaluate((x) => x.getBoundingClientRect().top);
+  assert.ok(labTop >= headerHeight - 1, 'hash target clears sticky header');
+
+  report.interactions = { baseHz: base, doubledLengthHz: doubledLength, doubledThicknessHz: doubledThickness, secondModeHz: secondMode, rotaryRitzHz: corrected, liveResult: true, audioPlayback: true, audioStopStable: true, pauseStable: true, skipFocus: true, hashFocus: true };
+}
+
+try {
+  const desktop = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'no-preference' });
+  const { page: desktopPage } = await loadPage(desktop, 'desktop');
+  await structuralChecks(desktopPage, 'desktop', 1440, false);
+  await interactionChecks(desktopPage);
+  await desktopPage.screenshot({ path: `${outDir}/desktop.png`, fullPage: true });
+  await desktop.close();
+
+  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'no-preference' });
+  const { page: mobilePage } = await loadPage(mobile, 'mobile390');
+  await structuralChecks(mobilePage, 'mobile390', 390, true);
+  await mobilePage.screenshot({ path: `${outDir}/mobile390.png`, fullPage: true });
+  await mobile.close();
+
+  const narrow = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: 'no-preference' });
+  const { page: narrowPage } = await loadPage(narrow, 'narrow320');
+  await structuralChecks(narrowPage, 'narrow320', 320, true);
+  await narrowPage.screenshot({ path: `${outDir}/narrow320.png`, fullPage: true });
+  await narrow.close();
+
+  const reduced = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  const { page: reducedPage } = await loadPage(reduced, 'reduced-motion');
+  assert.equal(await reducedPage.locator('#toggleMotion').textContent(), '繼續動畫');
+  assert.equal(await reducedPage.evaluate(() => window.__SINGING_RULER__.running), false);
+  report.interactions.reducedMotionStartsPaused = true;
+  await reduced.close();
+
+  await fs.writeFile(`${outDir}/report.json`, JSON.stringify(report, null, 2));
+  console.log(JSON.stringify({ status: 'PASS', url: baseURL, viewports: Object.keys(report.viewports), interactions: report.interactions, axe: report.axe }, null, 2));
+} finally {
+  await browser.close();
+}

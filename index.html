@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="從Euler–Bernoulli懸臂梁方程推導會唱歌的尺之固有頻率，並用互動模擬探索長度、厚度、材料、模態與釋放振幅。">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="zh_TW">
+  <meta property="og:title" content="會唱歌的尺｜懸臂梁振動理論與互動實驗">
+  <meta property="og:description" content="從基本物理到Euler–Bernoulli懸臂梁，再用互動模擬驗證長度平方反比、厚度正比與非整數模態。">
+  <meta property="og:url" content="https://addielu-phy.github.io/singing-ruler-lab/">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="canonical" href="https://addielu-phy.github.io/singing-ruler-lab/">
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <title>會唱歌的尺｜懸臂梁振動理論與互動實驗</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要內容</a>
+  <header class="site-header">
+    <nav class="nav-shell" aria-label="主要導覽">
+      <a class="brand" href="#top" aria-label="回到頁首">
+        <span class="brand-mark" aria-hidden="true">∿</span>
+        <span>會唱歌的尺</span>
+      </a>
+      <div class="nav-links">
+        <a href="#theory">理論</a>
+        <a href="#lab">互動實驗</a>
+        <a href="#evidence">實驗判讀</a>
+        <a href="#limits">模型邊界</a>
+      </div>
+      <a class="nav-cta" href="#lab">開始實驗</a>
+    </nav>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="hero" id="top" tabindex="-1" aria-labelledby="hero-title">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">2026 TYPT · Problem #13</p>
+          <h1 id="hero-title">一把尺，為什麼會「唱歌」？</h1>
+          <p class="hero-lede">從彈性、慣性與邊界條件出發，完整推導懸臂梁的固有頻率；再親手改變長度、厚度、材料與模態，看公式如何變成可觀察的聲音。</p>
+          <blockquote>
+            <strong>原題：</strong>一端固定的尺受敲擊後會振動並發出特徵聲音。研究聲音如何受到相關參數影響。
+          </blockquote>
+          <div class="hero-actions">
+            <a class="button primary" href="#theory">從原理開始</a>
+            <a class="button secondary" href="#lab">直接進入實驗</a>
+          </div>
+          <p class="source-note">依據使用者提供的TYPT簡報整理；<a href="https://docs.google.com/presentation/d/1KL1EgClQH7qyMllYU0xf3RIf7cquG6kQ/edit" rel="noopener noreferrer" target="_blank">開啟原簡報<span class="sr-only">（另開新視窗）</span></a></p>
+        </div>
+        <aside class="hero-formula" aria-label="核心結果預覽">
+          <p class="tech-label">FUNDAMENTAL RESULT</p>
+          <div class="formula hero-equation" role="math" aria-label="第一模態頻率 f 一等於 0.16154 乘以厚度 h 除以有效長度 L 的平方，再乘以楊氏係數 E 除以密度 rho 的平方根。">
+            <span>f<sub>1</sub> = 0.16154</span>
+            <span class="fraction"><span>h</span><span>L<sup>2</sup></span></span>
+            <span class="root">√<span class="radicand">E / ρ</span></span>
+          </div>
+          <p>細長、均勻、線性彈性的長方形懸臂梁；SI單位下得到Hz。</p>
+          <div class="mini-law-grid">
+            <span><b>L</b><small>平方反比</small></span>
+            <span><b>h</b><small>近似正比</small></span>
+            <span><b>E / ρ</b><small>平方根</small></span>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section theory-section" id="theory" tabindex="-1" aria-labelledby="theory-title">
+      <div class="container reading-grid">
+        <aside class="chapter-rail" aria-label="本章摘要">
+          <p class="tech-label">THEORY</p>
+          <ol>
+            <li>彎曲造成回復力</li>
+            <li>質量造成慣性</li>
+            <li>固定—自由邊界選出模態</li>
+          </ol>
+        </aside>
+        <article class="chapter-content">
+          <p class="eyebrow">從最基本的原理</p>
+          <h2 id="theory-title">三步走到懸臂梁頻率公式</h2>
+          <p class="section-lede">尺不是「一顆質量接一根彈簧」，而是一個每一小段都同時儲存彈性能、也具有慣性的連續系統。以下三個方程是整題的骨架。</p>
+
+          <div class="equation-bridge" role="group" aria-label="核心推導的三個方程">
+            <div class="equation-card">
+              <span class="step">01</span>
+              <h3>曲率產生彎矩</h3>
+              <div class="formula" role="math" aria-label="彎矩 M 等於負的楊氏係數 E 乘以截面二次矩 I，再乘以位移 w 對位置 x 的二階偏導數。">M = −EI ∂<sup>2</sup>w / ∂x<sup>2</sup></div>
+            </div>
+            <div class="equation-card">
+              <span class="step">02</span>
+              <h3>牛頓第二定律</h3>
+              <div class="formula" role="math" aria-label="楊氏係數 E 乘以截面二次矩 I 乘以位移 w 對位置 x 的四階偏導數，加上密度 rho 乘以截面積 A 乘以位移 w 對時間 t 的二階偏導數，等於零。">EI ∂<sup>4</sup>w / ∂x<sup>4</sup> + ρA ∂<sup>2</sup>w / ∂t<sup>2</sup> = 0</div>
+            </div>
+            <div class="equation-card">
+              <span class="step">03</span>
+              <h3>邊界選出頻率</h3>
+              <div class="formula" role="math" aria-label="雙曲餘弦 beta n 乘以餘弦 beta n 等於負一。">cosh β<sub>n</sub> · cos β<sub>n</sub> = −1</div>
+            </div>
+          </div>
+
+          <a class="inline-cta" href="#lab">已懂核心？跳到互動實驗 →</a>
+
+          <details class="deep-dive" open>
+            <summary>直觀模型：等效彈簧與等效質量</summary>
+            <div class="deep-body">
+              <p>自由端受力 <i>F</i> 時，靜態位移是：</p>
+              <div class="formula" role="math" aria-label="自由端位移 delta 等於作用力 F 乘以長度 L 的三次方，除以三倍楊氏係數 E 與截面二次矩 I 的乘積。">δ = FL<sup>3</sup> / (3EI)</div>
+              <p>因此等效剛性 <span class="inline-math">k<sub>eff</sub> = 3EI/L<sup>3</sup></span>。採用靜態自由端載荷的撓曲形狀作第一模態試函數時，廣義質量約為 <span class="inline-math">0.236ρAL</span>，得到：</p>
+              <div class="formula" role="math" aria-label="近似頻率 f 等於 0.5674 除以 L 的平方，再乘以 EI 除以 rho A 的平方根。">f ≈ 0.5674 L<sup>−2</sup> √(EI / ρA)</div>
+              <p>精確係數是0.5596，這個直觀模型只差約1.40%。</p>
+            </div>
+          </details>
+
+          <details class="deep-dive" open>
+            <summary>完整推導：分離變數與四個邊界條件</summary>
+            <div class="deep-body derivation-flow">
+              <p>令 <span class="inline-math">w(x,t)=X(x)T(t)</span>，代入梁方程後，時間方程與空間方程分離：</p>
+              <div class="formula" role="math" aria-label="時間函數 T 的二階導數加上 omega 平方乘以 T 等於零；空間函數 X 的四階導數減去 lambda 四次方乘以 X 等於零。">T̈ + ω<sup>2</sup>T = 0　；　X⁗ − λ<sup>4</sup>X = 0</div>
+              <p>固定端不能位移也不能轉動；自由端沒有彎矩也沒有剪力：</p>
+              <div class="formula" role="math" aria-label="固定端條件為 X 零等於零、X 一階導數零等於零；自由端條件為 X 二階導數 L 等於零、X 三階導數 L 等於零。">X(0)=X′(0)=0；X″(L)=X‴(L)=0</div>
+              <p>非零解要求 <span class="inline-math">cosh β<sub>n</sub> cos β<sub>n</sub>=−1</span>，其中 <span class="inline-math">β<sub>n</sub>=λ<sub>n</sub>L</span>。</p>
+              <div class="formula result" role="math" aria-label="第 n 模態角頻率 omega n 等於 beta n 的平方除以 L 的平方，再乘以 EI 除以 rho A 的平方根。普通頻率 f n 等於 omega n 除以二 pi。">ω<sub>n</sub> = β<sub>n</sub><sup>2</sup>L<sup>−2</sup>√(EI/ρA)　；　f<sub>n</sub>=ω<sub>n</sub>/(2π)</div>
+            </div>
+          </details>
+
+          <details class="deep-dive" open>
+            <summary>長方形尺：為什麼寬度消失？</summary>
+            <div class="deep-body">
+              <p>沿厚度方向彎曲時，截面積與截面二次矩是：</p>
+              <div class="formula" role="math" aria-label="截面積 A 等於寬度 b 乘以厚度 h；截面二次矩 I 等於 b 乘以 h 的三次方再除以十二。">A=bh　；　I=bh<sup>3</sup>/12</div>
+              <p>所以 <span class="inline-math">I/A=h<sup>2</sup>/12</span>，寬度同時增加剛性與質量，兩者在理想頻率公式中抵消：</p>
+              <div class="formula result" role="math" aria-label="第 n 模態頻率 f n 等於 beta n 的平方除以四 pi 根號三，再乘以 h 除以 L 的平方，再乘以 E 除以 rho 的平方根。">f<sub>n</sub> = [β<sub>n</sub><sup>2</sup>/(4π√3)] · (h/L<sup>2</sup>) · √(E/ρ)</div>
+              <aside class="callout" aria-label="彎曲方向提醒"><strong>注意：</strong>這裡的 <i>h</i> 是「彎曲方向的尺寸」。若把尺轉90°側彎，原本的寬度可能變成新的彎曲厚度。</aside>
+            </div>
+          </details>
+
+          <div class="symbol-grid" role="group" aria-label="符號與單位">
+            <div><b>L</b><span>有效懸臂長度</span><code>m</code></div>
+            <div><b>h</b><span>彎曲方向厚度</span><code>m</code></div>
+            <div><b>b</b><span>尺寬</span><code>m</code></div>
+            <div><b>E</b><span>楊氏係數</span><code>Pa</code></div>
+            <div><b>ρ</b><span>材料密度</span><code>kg/m³</code></div>
+            <div><b>β<sub>n</sub></b><span>邊界條件特徵根</span><code>無因次</code></div>
+          </div>
+          <a class="inline-cta" href="#lab">把公式變成可操作的尺 →</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="section lab-section" id="lab" tabindex="-1" aria-labelledby="lab-title">
+      <div class="container">
+        <div class="section-heading split-heading">
+          <div>
+            <p class="eyebrow">互動實驗室</p>
+            <h2 id="lab-title">改變一個參數，立即看見頻率</h2>
+            <p>物理量使用SI單位計算；動畫振幅與時間經視覺縮放，並非實際比例或SI即時錄影。</p>
+          </div>
+          <div class="status-pill" id="modelStatus">Euler–Bernoulli細梁模型</div>
+        </div>
+
+        <div class="lab-grid">
+          <div class="control-panel" id="controls" role="group" aria-label="模擬參數">
+            <div class="control-group">
+              <label for="material">材料</label>
+              <select id="material" name="material">
+                <option value="stainless">不鏽鋼（示例）</option>
+                <option value="acrylic">壓克力（示例塑膠）</option>
+                <option value="wood">木材（示例，方向相關）</option>
+                <option value="custom">自訂材料</option>
+              </select>
+            </div>
+            <div class="two-controls custom-material" hidden>
+              <div class="control-group">
+                <label for="young">楊氏係數 <span>E</span></label>
+                <div class="number-unit"><input id="young" type="number" min="0.1" max="500" step="0.1" value="193" disabled><span>GPa</span></div>
+              </div>
+              <div class="control-group">
+                <label for="density">密度 <span>ρ</span></label>
+                <div class="number-unit"><input id="density" type="number" min="100" max="25000" step="10" value="8000" disabled><span>kg/m³</span></div>
+              </div>
+            </div>
+
+            <div class="control-group">
+              <div class="label-row"><label for="length">有效長度 <span>L</span></label><output for="length" id="lengthOut">6.0 cm</output></div>
+              <input id="length" type="range" min="3" max="20" step="0.1" value="6">
+            </div>
+            <div class="control-group">
+              <div class="label-row"><label for="thickness">彎曲厚度 <span>h</span></label><output for="thickness" id="thicknessOut">0.50 mm</output></div>
+              <input id="thickness" type="range" min="0.2" max="4" step="0.05" value="0.5">
+            </div>
+            <div class="control-group">
+              <div class="label-row"><label for="width">尺寬 <span>b</span></label><output for="width" id="widthOut">30 mm</output></div>
+              <input id="width" type="range" min="10" max="60" step="1" value="30">
+              <p class="control-hint">理想頻率中會抵消，但面積仍可能影響音量。</p>
+            </div>
+            <div class="control-group">
+              <div class="label-row"><label for="amplitude">釋放位移 <span>δ</span></label><output for="amplitude" id="amplitudeOut">5 mm</output></div>
+              <input id="amplitude" type="range" min="1" max="30" step="1" value="5">
+              <p class="control-hint">線性模型中只改變所需力與視覺振幅，不改變固有頻率。</p>
+            </div>
+            <div class="two-controls">
+              <div class="control-group">
+                <label for="mode">振動模態</label>
+                <select id="mode"><option value="1">第1模態</option><option value="2">第2模態</option><option value="3">第3模態</option><option value="4">第4模態</option></select>
+              </div>
+              <div class="control-group">
+                <label for="model">梁模型</label>
+                <select id="model"><option value="eb">Euler–Bernoulli</option><option value="rotary-ritz">EB模態Rayleigh商近似</option></select>
+              </div>
+            </div>
+            <div class="control-group">
+              <div class="label-row"><label for="speed">動畫展示速率</label><output for="speed" id="speedOut">1.00×</output></div>
+              <input id="speed" type="range" min="0.25" max="2" step="0.25" value="1">
+            </div>
+            <div class="button-row">
+              <button type="button" class="button primary" id="toggleMotion">暫停動畫</button>
+              <button type="button" class="button secondary" id="reset">重設</button>
+            </div>
+            <div class="button-row">
+              <button type="button" class="button accent" id="playTone">播放理論頻率</button>
+              <button type="button" class="button secondary" id="stopTone">停止聲音</button>
+            </div>
+            <p class="audio-note" id="audioStatus" role="status">聲音是純音示意，不是完整的尺—空氣聲學模擬。</p>
+          </div>
+
+          <div class="visual-panel">
+            <div class="ruler-stage">
+              <svg id="rulerSvg" viewBox="0 0 760 340" role="img" aria-labelledby="rulerTitle rulerDesc">
+                <title id="rulerTitle">懸臂尺的振動模態動畫</title>
+                <desc id="rulerDesc">固定端位於左側，自由端位於右側。曲線顯示所選模態的相對形狀，振幅為視覺放大。</desc>
+                <defs>
+                  <linearGradient id="rulerGradient" x1="0" x2="1"><stop offset="0" stop-color="#0fa76e"/><stop offset="1" stop-color="#18e299"/></linearGradient>
+                </defs>
+                <rect x="24" y="82" width="74" height="178" rx="10" class="clamp"/>
+                <line x1="98" y1="170" x2="716" y2="170" class="equilibrium"/>
+                <path id="rulerPath" d="M98 170 L716 170"/>
+                <g id="nodeLayer" aria-hidden="true"></g>
+                <text x="30" y="286" class="svg-label">固定端</text>
+                <text x="650" y="286" class="svg-label">自由端</text>
+              </svg>
+              <div class="visual-caption"><span class="live-dot" aria-hidden="true"></span><span id="visualSummary">第1模態；動畫展示速率1倍。</span></div>
+            </div>
+
+            <div class="metric-grid" role="group" aria-label="即時計算結果">
+              <div class="metric featured"><span>理論頻率</span><strong id="frequencyMetric">110.20</strong><small>Hz</small></div>
+              <div class="metric"><span>週期</span><strong id="periodMetric">9.07</strong><small>ms</small></div>
+              <div class="metric"><span>EB特徵根 β<sub>n</sub></span><strong id="betaMetric">1.8751</strong><small id="betaNote">無因次</small></div>
+              <div class="metric"><span>釋放所需力</span><strong id="forceMetric">4.19</strong><small>N（靜態近似）</small></div>
+              <div class="metric"><span>細長比 L/h</span><strong id="slenderMetric">120</strong><small>越大越適合細梁模型</small></div>
+              <div class="metric"><span>有效懸臂段質量</span><strong id="massMetric">7.20</strong><small>g</small></div>
+            </div>
+            <p class="sr-only" id="resultAnnouncement" role="status" aria-live="polite" aria-atomic="true">理論頻率110.20赫茲，週期9.07毫秒。</p>
+
+            <aside class="model-warning" id="modelWarning" aria-live="polite" aria-label="模型適用性提示"></aside>
+
+            <div class="chart-card">
+              <div class="chart-heading"><div><p class="tech-label">EULER–BERNOULLI LENGTH LAW</p><h3>EB基準：長度平方反比</h3></div><span id="slopeLabel">EB斜率 3967 Hz·cm²</span></div>
+              <svg id="lengthChart" viewBox="0 0 700 320" role="img" aria-labelledby="chartTitle chartDesc">
+                <title id="chartTitle">Euler–Bernoulli頻率對一除以長度平方的關係圖</title>
+                <desc id="chartDesc">圖中固定使用Euler–Bernoulli模型；在其他參數固定時，頻率與一除以長度平方呈線性關係。</desc>
+              </svg>
+              <dl class="chart-data">
+                <div><dt>所選有效長度</dt><dd id="chartLengthValue">6.0 cm</dd></div>
+                <div><dt>EB基準頻率</dt><dd id="chartFrequencyValue">110.20 Hz</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <section class="worked-example" aria-labelledby="worked-title">
+          <div><p class="tech-label">LIVE EXAMPLE</p><h3 id="worked-title">目前參數逐步代入</h3><p>數值由目前控制器狀態即時計算；重設後回到已由回歸測試鎖定的預設例。</p></div>
+          <ol>
+            <li><span>截面</span><code id="workedSection">A = 1.50×10⁻⁵ m²；I = 3.125×10⁻¹³ m⁴</code></li>
+            <li><span>材料波速因子</span><code id="workedMaterial">√(E/ρ) = 4911.72 m/s</code></li>
+            <li><span id="workedModeLabel">代入第一模態</span><code id="workedSubstitution">f₁ = 110.20 Hz</code></li>
+          </ol>
+        </section>
+      </div>
+    </section>
+
+    <section class="section evidence-section" id="evidence" tabindex="-1" aria-labelledby="evidence-title">
+      <div class="container">
+        <div class="section-heading"><p class="eyebrow">對照簡報實驗</p><h2 id="evidence-title">四個變因，應該怎麼判讀？</h2><p>理論給的是可被證偽的趨勢；實驗則必須控制其他參數、標單位並報告不確定度。</p></div>
+        <div class="evidence-grid">
+          <article><span class="law-badge neutral">振幅</span><h3>力影響音量，不直接進入頻率</h3><div class="formula small" role="math" aria-label="自由端位移 delta 等於 F L 三次方除以三 E I。">δ=FL³/(3EI)</div><p>簡報實際控制的是釋放高度，不是直接量力。小振幅下它改變初始條件；大振幅才可能因幾何非線性改變頻率。</p></article>
+          <article><span class="law-badge">長度</span><h3>畫 f 對 1/L² 應為直線</h3><div class="formula small" role="math" aria-label="頻率 f 等於斜率 m 乘以一除以 L 平方。">f=m(1/L²)</div><p>斜率 <span class="inline-math">m=C<sub>n</sub>h√(E/ρ)</span>，不是沒有單位的數。夾具造成的有效長度誤差會被平方放大。</p></article>
+          <article><span class="law-badge warn">厚度</span><h3>細梁正比，厚梁逐漸偏離</h3><div class="formula small" role="math" aria-label="Rayleigh Ritz近似頻率 f RR 約等於Euler Bernoulli頻率 f EB，除以一加 Q n 除以十二乘上厚度 h 除以長度 L 的平方，整體再開平方根。">f<sub>RR</sub>≈f<sub>EB</sub>/√[1+(Q<sub>n</sub>/12)(h/L)²]</div><p><span class="inline-math">Q<sub>n</sub>=∫(φ′<sub>n</sub>)²du/∫φ<sub>n</sub>²du</span>，使用EB懸臂模態作Rayleigh–Ritz試函數，只近似加入轉動慣量；它不是完整Rayleigh梁或Timoshenko梁特徵解。簡報照片的cm標示與圖軸mm不一致，應先修正單位。</p></article>
+          <article><span class="law-badge">材料</span><h3>真正比較的是 √(E/ρ)</h3><div class="formula small" role="math" aria-label="頻率 f 正比於楊氏係數 E 除以密度 rho 的平方根。">f∝√(E/ρ)</div><p>比較不鏽鋼與塑膠時，厚度、長度、彎曲方向與夾持方式都要相同；否則斜率差不能只歸因於材料。</p></article>
+        </div>
+        <div class="data-interpretation">
+          <h3>簡報斜率的物理意義</h3>
+          <p>簡報的兩條 <span class="inline-math">f–1/L²</span> 擬合斜率為3330.49與1189.45 Hz·cm²；斜率比為2.800。若厚度相同，代表兩者的 <span class="inline-math">E/ρ</span> 比約為7.840，而不是只說「材料不同」。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section modes-section" aria-labelledby="modes-title">
+      <div class="container modes-grid">
+        <div><p class="eyebrow">為什麼聲音有辨識度？</p><h2 id="modes-title">懸臂梁不是整數泛音</h2><p>不同模態同時推動空氣，形成特徵頻譜。撥動位置決定各模態被激發多少，但固有頻率由尺本身與邊界決定。</p></div>
+        <table class="mode-table">
+          <caption class="sr-only">前四模態特徵值與頻率比</caption>
+          <thead><tr><th scope="col">模態</th><th scope="col">β<sub>n</sub></th><th scope="col">f<sub>n</sub>/f<sub>1</sub></th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>1.8751</td><td>1.0000</td></tr>
+            <tr><td>2</td><td>4.6941</td><td>6.2669</td></tr>
+            <tr><td>3</td><td>7.8548</td><td>17.5475</td></tr>
+            <tr><td>4</td><td>10.9955</td><td>34.3861</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section limits-section" id="limits" tabindex="-1" aria-labelledby="limits-title">
+      <div class="container">
+        <div class="section-heading"><p class="eyebrow">模型邊界</p><h2 id="limits-title">這個模擬沒有假裝解決所有聲學</h2><p>畫面展示的是梁的固有振動，不是把所有真實效應塞進一個看似精確的動畫。</p></div>
+        <div class="limit-grid">
+          <div><h3>模型包含</h3><ul><li>均勻長方形截面</li><li>固定—自由邊界</li><li>前四個彎曲模態</li><li>Euler–Bernoulli精確特徵根</li><li>可選EB模態Rayleigh–Ritz轉動慣量近似</li></ul></div>
+          <div><h3>模型忽略</h3><ul><li>夾具滑動與柔性</li><li>材料阻尼、空氣附加質量</li><li>完整Timoshenko剪切效應</li><li>非線性大振幅與碰撞</li><li>真實麥克風、房間與聲輻射</li></ul></div>
+          <div><h3>視覺與聲音</h3><ul><li>動畫時間不是SI時間</li><li>動畫振幅為視覺放大</li><li>純音按鈕只播放單一理論頻率</li><li>寬度仍可能影響音量</li><li>高模態可能超出可聽範圍</li></ul></div>
+        </div>
+        <aside class="callout strong" aria-label="實驗設計建議"><strong>真正做實驗時：</strong>使用剛性夾具、從夾具邊緣量有效長度、逐一控制變因、校正厚度單位、記錄誤差棒，並把FFT峰值與理論模態逐一對應。</aside>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-grid"><div><strong>會唱歌的尺</strong><p>理論、模態與可驗證的互動實驗。</p></div><div><a href="#top">回到頁首</a><a href="https://www.gypt.org/aufgaben/13-the-singing-ruler.html" target="_blank" rel="noopener noreferrer">GYPT題目頁<span class="sr-only">（另開新視窗）</span></a></div></div>
+  </footer>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>

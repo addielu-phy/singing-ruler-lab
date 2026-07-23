@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://addielu-phy.github.io/singing-ruler-lab/sitemap.xml
