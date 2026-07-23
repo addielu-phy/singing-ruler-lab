@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { cantileverModeShape } from '../src/model.js';
 
 const require = createRequire(import.meta.url);
 const axeSource = await fs.readFile(require.resolve('axe-core/axe.min.js'), 'utf8');
@@ -11,6 +12,11 @@ const outDir = process.env.QA_DIR || 'qa';
 await fs.mkdir(outDir, { recursive: true });
 const report = { url: baseURL, viewports: {}, interactions: {}, axe: {} };
 const browser = await chromium.launch({ headless: true });
+const rulerExtremaByMode = Object.fromEntries([1, 2, 3, 4].map((mode) => [mode, Array.from({ length: 401 }, (_, index) => {
+  const ratio = index / 400;
+  const displacement = 92 * cantileverModeShape(ratio, mode);
+  return { x: 98 + 618 * ratio, positiveY: 170 + displacement, negativeY: 170 - displacement };
+})]));
 
 async function loadPage(context, label) {
   const page = await context.newPage();
@@ -23,6 +29,101 @@ async function loadPage(context, label) {
   await page.waitForFunction(() => document.documentElement.dataset.ready === 'true');
   assert.deepEqual(errors, [], `${label}: JavaScript errors`);
   return { page, errors };
+}
+
+async function labSvgGeometryChecks(page, label) {
+  const modes = {};
+  for (const mode of [1, 2, 3, 4]) {
+    await page.locator('#mode').selectOption(String(mode));
+    const geometry = await page.evaluate(({ envelope }) => {
+      const screenBox = (node) => {
+        const box = node.getBoundingClientRect();
+        return { text: node.textContent, left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+      };
+      const pairwiseOverlap = (boxes, clearance = 0) => {
+        const collisions = [];
+        for (let first = 0; first < boxes.length; first += 1) {
+          for (let second = first + 1; second < boxes.length; second += 1) {
+            const a = boxes[first];
+            const b = boxes[second];
+            const overlapWidth = Math.min(a.right + clearance, b.right + clearance) - Math.max(a.left - clearance, b.left - clearance);
+            const overlapHeight = Math.min(a.bottom + clearance, b.bottom + clearance) - Math.max(a.top - clearance, b.top - clearance);
+            if (overlapWidth > 0.5 && overlapHeight > 0.5) collisions.push([a.text, b.text]);
+          }
+        }
+        return collisions;
+      };
+
+      const chart = document.querySelector('#lengthChart');
+      const chartRect = chart.getBoundingClientRect();
+      const chartTextBoxes = [...chart.querySelectorAll('.chart-text')].map(screenBox);
+      const chartClippedText = chartTextBoxes.filter((box) => box.left < chartRect.left - 0.5
+        || box.top < chartRect.top - 0.5
+        || box.right > chartRect.right + 0.5
+        || box.bottom > chartRect.bottom + 0.5);
+      const chartGraphicOverlaps = [];
+      const chartMatrix = chart.getScreenCTM();
+      for (const graphic of chart.querySelectorAll('path, line, circle')) {
+        const length = graphic.getTotalLength();
+        const graphicMatrix = graphic.getScreenCTM();
+        const screenStroke = Number.parseFloat(getComputedStyle(graphic).strokeWidth || '0') * Math.hypot(graphicMatrix.a, graphicMatrix.b);
+        const clearance = screenStroke / 2 + 1;
+        const samples = Math.max(2, Math.ceil(length / 3));
+        for (let index = 0; index <= samples; index += 1) {
+          const point = graphic.getPointAtLength(length * index / samples);
+          const screenPoint = new DOMPoint(point.x, point.y).matrixTransform(chartMatrix);
+          const hit = chartTextBoxes.find((box) => screenPoint.x >= box.left - clearance
+            && screenPoint.x <= box.right + clearance
+            && screenPoint.y >= box.top - clearance
+            && screenPoint.y <= box.bottom + clearance);
+          if (hit) {
+            chartGraphicOverlaps.push(hit.text);
+            break;
+          }
+        }
+      }
+
+      const ruler = document.querySelector('.ruler-stage svg');
+      const rulerLabels = [...ruler.querySelectorAll('.svg-label')].map((node) => {
+        const box = node.getBBox();
+        return { text: node.textContent, left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height };
+      });
+      const rulerViewBox = ruler.viewBox.baseVal;
+      const rulerClippedText = rulerLabels.filter((box) => box.left < rulerViewBox.x - 0.5
+        || box.top < rulerViewBox.y - 0.5
+        || box.right > rulerViewBox.x + rulerViewBox.width + 0.5
+        || box.bottom > rulerViewBox.y + rulerViewBox.height + 0.5);
+      const rulerEnvelopeOverlaps = [];
+      const rulerClearance = Number.parseFloat(getComputedStyle(document.querySelector('#rulerPath')).strokeWidth) / 2 + 2;
+      for (const point of envelope) {
+        for (const y of [point.positiveY, point.negativeY]) {
+          const hit = rulerLabels.find((box) => point.x >= box.left - rulerClearance
+            && point.x <= box.right + rulerClearance
+            && y >= box.top - rulerClearance
+            && y <= box.bottom + rulerClearance);
+          if (hit && !rulerEnvelopeOverlaps.includes(hit.text)) rulerEnvelopeOverlaps.push(hit.text);
+        }
+      }
+
+      return {
+        chartClippedText,
+        chartTextOverlaps: pairwiseOverlap(chartTextBoxes, 2),
+        chartGraphicOverlaps: [...new Set(chartGraphicOverlaps)],
+        rulerClippedText,
+        rulerTextOverlaps: pairwiseOverlap(rulerLabels, 2),
+        rulerEnvelopeOverlaps,
+      };
+    }, { envelope: rulerExtremaByMode[mode] });
+    assert.deepEqual(geometry.chartClippedText, [], `${label}: mode ${mode} chart text stays inside SVG`);
+    assert.deepEqual(geometry.chartTextOverlaps, [], `${label}: mode ${mode} chart text has safe pairwise clearance`);
+    assert.deepEqual(geometry.chartGraphicOverlaps, [], `${label}: mode ${mode} chart text clears painted graphics`);
+    assert.deepEqual(geometry.rulerClippedText, [], `${label}: mode ${mode} ruler labels stay inside SVG`);
+    assert.deepEqual(geometry.rulerTextOverlaps, [], `${label}: mode ${mode} ruler labels have safe pairwise clearance`);
+    assert.deepEqual(geometry.rulerEnvelopeOverlaps, [], `${label}: mode ${mode} ruler labels clear both full-amplitude extrema`);
+    modes[mode] = geometry;
+  }
+  await page.locator('#mode').selectOption('1');
+  return modes;
 }
 
 async function structuralChecks(page, label, expectedWidth, mobile) {
@@ -116,13 +217,18 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
           && comesBefore(tabsContainer, storySvg)
           && comesBefore(storySvg, panel)
           && comesBefore(panel, controls),
-        mobileVisualBetweenTabsAndPanel: !mobile || (visualRect.top >= tabsRect.bottom - 1 && visualRect.bottom <= panelRect.top + 1),
+        stackedVisualBetweenTabsAndPanel: !window.matchMedia('(max-width: 920px)').matches || (visualRect.top >= tabsRect.bottom - 1 && visualRect.bottom <= panelRect.top + 1),
       };
     });
     theoryApi?.setStep(1);
     const storyBackground = getComputedStyle(document.querySelector('.story-visual')).backgroundColor;
     const hookBackground = firstGradientColor(document.querySelector('.student-hook'));
     const labBackground = firstGradientColor(document.querySelector('.lab-section'));
+    const renderedSvgFontPx = (text) => {
+      const matrix = text.getScreenCTM();
+      const verticalScale = Math.hypot(matrix.c, matrix.d);
+      return Number.parseFloat(getComputedStyle(text).fontSize) * verticalScale;
+    };
     const contrastChecks = [
       ['body text', getComputedStyle(document.body).color, getComputedStyle(document.body).backgroundColor],
       ['muted source text', getComputedStyle(document.querySelector('.source-note')).color, getComputedStyle(document.body).backgroundColor],
@@ -154,8 +260,8 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
       mainFocusable: document.querySelector('#main').tabIndex === -1,
       liveResult: document.querySelector('#resultAnnouncement')?.getAttribute('role') === 'status',
       forceText: document.querySelector('#forceMetric')?.textContent,
-      chartTextHeight: document.querySelector('.chart-text')?.getBoundingClientRect().height || 0,
-      rulerLabelHeight: document.querySelector('.svg-label')?.getBoundingClientRect().height || 0,
+      chartTextHeight: Math.min(...[...document.querySelectorAll('.chart-text')].filter((x) => x.getClientRects().length).map(renderedSvgFontPx)),
+      rulerLabelHeight: Math.min(...[...document.querySelectorAll('.svg-label')].filter((x) => x.getClientRects().length).map(renderedSvgFontPx)),
       chartIsEbBaseline: document.querySelector('.chart-heading h3')?.textContent.includes('EB基準'),
       focusColor,
       focusContrast,
@@ -183,7 +289,7 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
     assert.deepEqual(step.graphicOverlaps, [], `${label}: step ${step.step} SVG labels overlap the mode path at an animation extremum`);
     assert.equal(step.panelFocusable, true, `${label}: step ${step.step} tabpanel is keyboard-focusable`);
     assert.equal(step.fullDomSequence, true, `${label}: step ${step.step} DOM/accessibility order is heading, tabs, SVG, panel, controls`);
-    assert.equal(step.mobileVisualBetweenTabsAndPanel, true, `${label}: step ${step.step} mobile visual follows tabs before panel`);
+    assert.equal(step.stackedVisualBetweenTabsAndPanel, true, `${label}: step ${step.step} stacked visual sits between tabs and active panel`);
   });
   assert.ok(result.formulaCount >= 14, `${label}: formula count`);
   assert.equal(result.mathLabelsValid, true, `${label}: complete Traditional Chinese math labels`);
@@ -196,10 +302,8 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
   assert.equal(result.chartIsEbBaseline, true, `${label}: length chart explicitly EB-only`);
   assert.ok(result.focusContrast >= 3, `${label}: focus indicator contrast ${result.focusContrast}`);
   assert.equal(result.contrastChecks.every((check) => check.ratio >= 4.5), true, `${label}: conservative color contrast ${JSON.stringify(result.contrastChecks)}`);
-  if (mobile) {
-    assert.ok(result.chartTextHeight >= 10, `${label}: chart text readable (${result.chartTextHeight}px)`);
-    assert.ok(result.rulerLabelHeight >= 10, `${label}: ruler labels readable (${result.rulerLabelHeight}px)`);
-  }
+  assert.ok(result.chartTextHeight >= 14, `${label}: chart text readable (${result.chartTextHeight}px)`);
+  assert.ok(result.rulerLabelHeight >= 14, `${label}: ruler labels readable (${result.rulerLabelHeight}px)`);
   assert.equal(result.details.every((v) => v === !mobile), true, `${label}: responsive theory disclosure state`);
   assert.equal(result.ranges.every((x) => x.height >= 44 && x.aria), true, `${label}: range size and localized aria-valuetext`);
   assert.deepEqual(result.targetSizes, [], `${label}: undersized targets`);
@@ -211,6 +315,7 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
     .filter((x) => x.scrollWidth > x.clientWidth + 1));
   assert.deepEqual(overflow, [], `${label}: dense content overflow`);
 
+  result.labSvgModes = await labSvgGeometryChecks(page, label);
   await page.evaluate(axeSource);
   const axe = await page.evaluate(async () => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } }));
   assert.deepEqual(axe.violations, [], `${label}: axe violations ${JSON.stringify(axe.violations.map((x) => x.id))}`);
@@ -224,20 +329,48 @@ async function interactionChecks(page) {
     await page.locator(`#${id}`).evaluate((el, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, value);
   };
   const invalidStepInputs = await page.evaluate(() => {
-    const before = {
+    const snapshot = () => ({
       step: window.__THEORY_EXPLAINER__.step,
-      selected: document.querySelector('[role="tab"][aria-selected="true"]').id,
-    };
+      tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => ({ id: tab.id, selected: tab.getAttribute('aria-selected'), tabIndex: tab.tabIndex })),
+      panels: [...document.querySelectorAll('.story-panel')].map((panel) => ({ id: panel.id, hidden: panel.hidden, tabIndex: panel.tabIndex })),
+      visuals: [...document.querySelectorAll('.story-visual-group')].map((visual) => ({ id: visual.id, hidden: visual.hidden, display: getComputedStyle(visual).display })),
+      status: document.querySelector('#theoryStatus').textContent,
+      motionButton: document.querySelector('#theoryMotion').textContent,
+      autoButton: document.querySelector('#theoryAuto').textContent,
+      motionRunning: window.__THEORY_EXPLAINER__.motionRunning,
+      autoPlaying: window.__THEORY_EXPLAINER__.autoPlaying,
+      focusedId: document.activeElement?.id || '',
+    });
+    const before = snapshot();
     const values = [
       true,
+      false,
+      null,
+      undefined,
+      '',
+      '2',
+      'not-a-step',
       [2],
+      [],
+      [1, 2],
       {},
+      new Number(2),
+      new String('2'),
       Symbol('x'),
+      2n,
       Number.NaN,
       Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
       1.5,
+      2.0000000001,
       0,
+      -1,
       4,
+      999,
+      () => 2,
+      /2/,
+      new Date(2),
+      new Proxy({}, { get() { throw new Error('properties must not be read'); } }),
       { [Symbol.toPrimitive]() { throw new Error('coercion must not run'); } },
     ];
     const results = values.map((value) => {
@@ -247,14 +380,7 @@ async function interactionChecks(page) {
         return { returned: null, threw: true, name: error.name };
       }
     });
-    return {
-      before,
-      after: {
-        step: window.__THEORY_EXPLAINER__.step,
-        selected: document.querySelector('[role="tab"][aria-selected="true"]').id,
-      },
-      results,
-    };
+    return { before, after: snapshot(), results };
   });
   assert.deepEqual(invalidStepInputs.results, invalidStepInputs.results.map(() => ({ returned: false, threw: false })), 'public setStep rejects invalid inputs without coercion or exceptions');
   assert.deepEqual(invalidStepInputs.after, invalidStepInputs.before, 'invalid setStep inputs do not mutate state or DOM');
@@ -307,10 +433,18 @@ async function interactionChecks(page) {
   await page.locator('#theoryAuto').click();
   assert.equal(await page.evaluate(() => !window.__THEORY_EXPLAINER__.autoPlaying && window.__THEORY_EXPLAINER__.motionRunning), true, 'stopping autoplay restores the prior running motion state');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.waitForFunction(() => !window.__THEORY_EXPLAINER__.motionRunning, null, { timeout: 1000 });
-  assert.match(await page.locator('#theoryStatus').textContent(), /減少動態/, 'live reduced-motion preference change is announced');
+  await page.waitForFunction(() => !window.__THEORY_EXPLAINER__.motionRunning && !window.__SINGING_RULER__.running, null, { timeout: 1000 });
+  assert.match(await page.locator('#theoryStatus').textContent(), /減少動態/, 'live reduced-motion preference change is announced for theory');
+  assert.equal(await page.locator('#toggleMotion').textContent(), '繼續動畫', 'live reduced-motion preference change updates lab control');
+  assert.match(await page.locator('#motionStatus').textContent(), /減少動態.*暫停/, 'live reduced-motion preference change is announced for lab');
+  const labReducedPath = await page.locator('#rulerPath').getAttribute('d');
+  await page.waitForTimeout(250);
+  assert.equal(await page.locator('#rulerPath').getAttribute('d'), labReducedPath, 'live reduced-motion preference change freezes lab animation');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.motionRunning), false, 'leaving reduced motion does not unexpectedly restart animation');
+  assert.equal(await page.evaluate(() => !window.__THEORY_EXPLAINER__.motionRunning && !window.__SINGING_RULER__.running), true, 'leaving reduced motion does not unexpectedly restart animations');
+  await page.locator('#toggleMotion').click();
+  assert.equal(await page.evaluate(() => window.__SINGING_RULER__.running), true, 'user can explicitly resume lab animation after reduced motion is disabled');
+  assert.match(await page.locator('#motionStatus').textContent(), /繼續播放/, 'manual lab resume is announced');
 
   const base = await getFrequency();
   await setRange('length', 12);
@@ -409,6 +543,24 @@ try {
   await mediumPage.locator('#story-tab-3').click();
   await mediumPage.locator('.theory-story').screenshot({ path: `${outDir}/medium1024-step3.png` });
   await medium.close();
+
+  for (const width of [921, 920]) {
+    const label = `breakpoint${width}`;
+    const breakpoint = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'no-preference' });
+    const { page: breakpointPage } = await loadPage(breakpoint, label);
+    await structuralChecks(breakpointPage, label, width, false);
+    await breakpointPage.screenshot({ path: `${outDir}/${label}.png`, fullPage: true });
+    await breakpointPage.locator('#mode').selectOption('4');
+    await breakpointPage.locator('.chart-card').screenshot({ path: `${outDir}/${label}-mode4-chart.png` });
+    await breakpointPage.locator('#mode').selectOption('1');
+    await breakpointPage.evaluate(({ envelope }) => {
+      document.querySelector('.site-header').style.visibility = 'hidden';
+      document.querySelector('.skip-link').style.display = 'none';
+      document.querySelector('#rulerPath').setAttribute('d', envelope.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(2)} ${point.positiveY.toFixed(2)}`).join(' '));
+    }, { envelope: rulerExtremaByMode[1] });
+    await breakpointPage.locator('.ruler-stage').screenshot({ path: `${outDir}/${label}-ruler-extreme.png` });
+    await breakpoint.close();
+  }
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'no-preference' });
   const { page: mobilePage } = await loadPage(mobile, 'mobile390');

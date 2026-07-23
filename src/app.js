@@ -16,7 +16,8 @@ const controls = {
 };
 const defaults = Object.fromEntries(Object.entries(controls).map(([key, el]) => [key, el.value]));
 initTheoryExplainer();
-let running = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+let running = !motionPreference.matches;
 let phase = 0;
 let previousFrame = performance.now();
 let currentState;
@@ -180,8 +181,8 @@ function drawLengthChart() {
   const width = narrow ? 360 : 700;
   const height = narrow ? 300 : 320;
   const margin = narrow
-    ? { left: 66, right: 16, top: 22, bottom: 60 }
-    : { left: 64, right: 22, top: 25, bottom: 52 };
+    ? { left: 136, right: 16, top: 22, bottom: 60 }
+    : { left: 136, right: 22, top: 25, bottom: 52 };
   const points = [];
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   for (let lengthCm = 3; lengthCm <= 20; lengthCm += 0.5) {
@@ -213,17 +214,22 @@ function drawLengthChart() {
   const selectedX = 1 / (currentState.lengthM * 100) ** 2;
   svg.append(el('circle', { cx: sx(selectedX), cy: sy(currentSnapshot.ebFrequencyHz), r: narrow ? 8 : 7, class: 'chart-selected' }));
   svg.append(el('text', { x: width / 2, y: height - 14, 'text-anchor': 'middle', class: 'chart-text' }, '1 / L²（cm⁻²）'));
-  const axisX = narrow ? 18 : 16;
+  const axisX = 32;
   svg.append(el('text', { x: axisX, y: height / 2, transform: `rotate(-90 ${axisX} ${height / 2})`, 'text-anchor': 'middle', class: 'chart-text' }, 'EB頻率 f（Hz）'));
   $('#chartDesc').textContent = `圖中固定使用Euler–Bernoulli模型；所選長度的EB基準頻率為${fmt(currentSnapshot.ebFrequencyHz, 2)}赫茲，頻率與一除以長度平方呈直線。`;
   $('#chartLengthValue').textContent = `${fmt(currentState.lengthM * 100, 1)} cm`;
   $('#chartFrequencyValue').textContent = `${fmt(currentSnapshot.ebFrequencyHz, 2)} Hz`;
 }
 
-function setRunning(next) {
-  running = next;
+function setRunning(next, { announce = false, reducedMotion = false } = {}) {
+  running = Boolean(next);
   $('#toggleMotion').textContent = running ? '暫停動畫' : '繼續動畫';
   if (window.__SINGING_RULER__) window.__SINGING_RULER__.running = running;
+  if (announce) {
+    $('#motionStatus').textContent = reducedMotion
+      ? '偵測到減少動態偏好，尺的振動動畫已暫停。'
+      : `尺的振動動畫已${running ? '繼續播放' : '暫停'}。`;
+  }
 }
 
 function animate(now) {
@@ -277,7 +283,7 @@ async function playTone() {
 
 Object.values(controls).forEach((control) => control.addEventListener('input', updateOutputs));
 controls.material.addEventListener('change', updateOutputs);
-$('#toggleMotion').addEventListener('click', () => setRunning(!running));
+$('#toggleMotion').addEventListener('click', () => setRunning(!running, { announce: true }));
 $('#reset').addEventListener('click', () => {
   Object.entries(defaults).forEach(([key, value]) => { controls[key].value = value; });
   phase = 0; stopTone(); updateOutputs();
@@ -291,6 +297,9 @@ syncDetails();
 detailMedia.addEventListener('change', () => {
   syncDetails();
   if (currentState) drawLengthChart();
+});
+motionPreference.addEventListener('change', (event) => {
+  if (event.matches) setRunning(false, { announce: true, reducedMotion: true });
 });
 
 function focusHashTarget() {

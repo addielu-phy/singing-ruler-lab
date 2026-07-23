@@ -331,6 +331,7 @@
               <button type="button" class="button primary" id="toggleMotion">暫停動畫</button>
               <button type="button" class="button secondary" id="reset">重設</button>
             </div>
+            <p class="sr-only" id="motionStatus" role="status" aria-live="polite"></p>
             <div class="button-row">
               <button type="button" class="button accent" id="playTone">播放理論頻率</button>
               <button type="button" class="button secondary" id="stopTone">停止聲音</button>
@@ -350,8 +351,8 @@
                 <line x1="98" y1="170" x2="716" y2="170" class="equilibrium"/>
                 <path id="rulerPath" d="M98 170 L716 170"/>
                 <g id="nodeLayer" aria-hidden="true"></g>
-                <text x="30" y="286" class="svg-label">固定端</text>
-                <text x="650" y="286" class="svg-label">自由端</text>
+                <text x="30" y="328" class="svg-label">固定端</text>
+                <text x="730" y="328" text-anchor="end" class="svg-label">自由端</text>
               </svg>
               <div class="visual-caption"><span class="live-dot" aria-hidden="true"></span><span id="visualSummary">第1模態；動畫展示速率1倍。</span></div>
             </div>
