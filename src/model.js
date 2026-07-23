@@ -53,7 +53,7 @@ const finite = (value, name) => {
 const nonNegative = (value, name) => {
   finite(value, name);
   if (value < 0) throw new RangeError(`${name} 不得為負數`);
-  return value;
+  return value === 0 ? 0 : value;
 };
 
 const normalizedModel = (model) => {
@@ -64,14 +64,51 @@ const normalizedModel = (model) => {
 };
 
 const stateObject = (state) => {
-  if (typeof state !== 'object' || state === null || Array.isArray(state)) {
+  let invalid;
+  try {
+    invalid = typeof state !== 'object' || state === null || Array.isArray(state);
+  } catch {
+    throw new RangeError('模型狀態無法安全檢查');
+  }
+  if (invalid) {
     throw new RangeError('模型狀態必須是非null物件');
   }
   return state;
 };
 
+const STATE_FIELDS = Object.freeze([
+  'lengthM', 'widthM', 'thicknessM', 'youngPa', 'densityKgM3',
+  'mode', 'amplitudeM', 'dampingRatio', 'model', 'forceN', 'displacementM',
+]);
+
+const stateSnapshot = (state) => {
+  stateObject(state);
+  const snapshot = {};
+  for (const key of STATE_FIELDS) {
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(state, key);
+    } catch {
+      throw new RangeError('模型狀態欄位無法安全讀取');
+    }
+    if (descriptor && !Object.hasOwn(descriptor, 'value')) {
+      throw new RangeError(`模型狀態欄位${key}必須是資料屬性`);
+    }
+    snapshot[key] = descriptor?.value;
+  }
+  return Object.freeze(snapshot);
+};
+
 const MIN_NORMAL = 2 ** -1022;
 const NORMAL_SAFETY_FLOOR = MIN_NORMAL * (1 + 32 * Number.EPSILON);
+
+const positiveDerived = (value, name) => {
+  positive(value, name);
+  if (value <= NORMAL_SAFETY_FLOOR) {
+    throw new RangeError(`${name}發生浮點下溢`);
+  }
+  return value;
+};
 
 const finiteDerived = (value, source, name) => {
   finite(value, name);
@@ -86,10 +123,10 @@ export function rectangularSection(widthM, thicknessM) {
   positive(thicknessM, '厚度');
   const areaM2 = widthM * thicknessM;
   const inertiaM4 = widthM * thicknessM ** 3 / 12;
-  return {
-    areaM2: positive(areaM2, '截面面積計算結果'),
-    inertiaM4: positive(inertiaM4, '截面二次矩計算結果'),
-  };
+  return Object.freeze({
+    areaM2: positiveDerived(areaM2, '截面面積計算結果'),
+    inertiaM4: positiveDerived(inertiaM4, '截面二次矩計算結果'),
+  });
 }
 
 function normalizedMode(mode) {
@@ -108,7 +145,7 @@ export function eulerBernoulliFrequency(state) {
     youngPa,
     densityKgM3,
     mode = 1,
-  } = stateObject(state);
+  } = stateSnapshot(state);
   positive(lengthM, '有效長度');
   positive(youngPa, '楊氏係數');
   positive(densityKgM3, '密度');
@@ -116,52 +153,54 @@ export function eulerBernoulliFrequency(state) {
   const { beta } = normalizedMode(mode);
   const frequencyHz = beta ** 2 / (2 * Math.PI * lengthM ** 2)
     * Math.sqrt(youngPa * inertiaM4 / (densityKgM3 * areaM2));
-  return positive(frequencyHz, 'Euler–Bernoulli頻率計算結果');
+  return positiveDerived(frequencyHz, 'Euler–Bernoulli頻率計算結果');
 }
 
 export function rayleighRitzFrequency(state) {
-  const beam = stateObject(state);
+  const beam = stateSnapshot(state);
   const eb = eulerBernoulliFrequency(beam);
   const { index } = normalizedMode(beam.mode ?? 1);
-  const ratio = positive(
+  const ratio = positiveDerived(
     positive(beam.thicknessM, '厚度') / positive(beam.lengthM, '有效長度'),
     '厚長比計算結果',
   );
-  const rotaryTerm = positive(ROTARY_RAYLEIGH_Q[index] * ratio ** 2 / 12, 'Rayleigh–Ritz轉動修正量');
+  const rotaryTerm = positiveDerived(ROTARY_RAYLEIGH_Q[index] * ratio ** 2 / 12, 'Rayleigh–Ritz轉動修正量');
   const denominator = positive(Math.sqrt(1 + rotaryTerm), 'Rayleigh–Ritz修正分母');
   if (denominator === 1) throw new RangeError('Rayleigh–Ritz修正小於可表示範圍');
-  return positive(eb / denominator, 'Rayleigh–Ritz頻率計算結果');
+  return positiveDerived(eb / denominator, 'Rayleigh–Ritz頻率計算結果');
 }
 
 export function frequencySeries(state, model = 'eb') {
-  const beam = stateObject(state);
+  const beam = stateSnapshot(state);
   const selectedModel = normalizedModel(model);
-  return BETA_ROOTS.map((_, index) => {
+  return Object.freeze(BETA_ROOTS.map((_, index) => {
     const next = { ...beam, mode: index + 1 };
     return selectedModel === 'rotary-ritz' ? rayleighRitzFrequency(next) : eulerBernoulliFrequency(next);
-  });
+  }));
 }
 
 export function tipStiffness(state) {
   const {
     lengthM, widthM, thicknessM, youngPa,
-  } = stateObject(state);
+  } = stateSnapshot(state);
   positive(lengthM, '有效長度');
   positive(youngPa, '楊氏係數');
   const { inertiaM4 } = rectangularSection(widthM, thicknessM);
-  return positive(3 * youngPa * inertiaM4 / lengthM ** 3, '端點剛性計算結果');
+  return positiveDerived(3 * youngPa * inertiaM4 / lengthM ** 3, '端點剛性計算結果');
 }
 
 export function staticTipDeflection(state) {
-  const { forceN, ...beam } = stateObject(state);
+  const { forceN, ...beam } = stateSnapshot(state);
   finite(forceN, '作用力');
-  return finiteDerived(forceN / tipStiffness(beam), forceN, '端點位移計算結果');
+  const result = finiteDerived(forceN / tipStiffness(beam), forceN, '端點位移計算結果');
+  return result === 0 ? 0 : result;
 }
 
 export function tipForceForDeflection(state) {
-  const { displacementM, ...beam } = stateObject(state);
+  const { displacementM, ...beam } = stateSnapshot(state);
   finite(displacementM, '位移');
-  return finiteDerived(displacementM * tipStiffness(beam), displacementM, '端點作用力計算結果');
+  const result = finiteDerived(displacementM * tipStiffness(beam), displacementM, '端點作用力計算結果');
+  return result === 0 ? 0 : result;
 }
 
 function rawModeShape(x, beta) {
@@ -198,7 +237,7 @@ export function cantileverModeShape(xRatio, mode = 1) {
 }
 
 export function modelSnapshot(state) {
-  const beam = stateObject(state);
+  const beam = stateSnapshot(state);
   const {
     lengthM,
     widthM,
@@ -214,29 +253,29 @@ export function modelSnapshot(state) {
   nonNegative(amplitudeM, '釋放位移');
   nonNegative(dampingRatio, '阻尼比');
   const { areaM2, inertiaM4 } = rectangularSection(widthM, thicknessM);
-  const ebFrequencyHz = eulerBernoulliFrequency(state);
-  const ritzFrequencyHz = rayleighRitzFrequency(state);
+  const ebFrequencyHz = eulerBernoulliFrequency(beam);
+  const ritzFrequencyHz = rayleighRitzFrequency(beam);
   const frequencyHz = selectedModel === 'rotary-ritz' ? ritzFrequencyHz : ebFrequencyHz;
-  const angularFrequencyRadS = positive(2 * Math.PI * frequencyHz, '角頻率計算結果');
-  const massKg = positive(densityKgM3 * areaM2 * lengthM, '質量計算結果');
-  const stiffness = tipStiffness(state);
+  const angularFrequencyRadS = positiveDerived(2 * Math.PI * frequencyHz, '角頻率計算結果');
+  const massKg = positiveDerived(densityKgM3 * areaM2 * lengthM, '質量計算結果');
+  const stiffness = tipStiffness(beam);
   const { beta, index } = normalizedMode(mode);
-  const ebSlopeHzM2 = positive(ebFrequencyHz * lengthM ** 2, '頻率斜率計算結果');
-  const correctionPercent = positive((1 - ritzFrequencyHz / ebFrequencyHz) * 100, '修正百分比計算結果');
-  const periodMs = positive(1000 / frequencyHz, '週期計算結果');
-  const ebSlopeHzCm2 = positive(ebSlopeHzM2 * 1e4, '公分制頻率斜率計算結果');
-  const tipForceN = finite(tipForceForDeflection({ ...state, displacementM: amplitudeM }), '端點作用力計算結果');
-  const linearMassKgM = positive(densityKgM3 * areaM2, '線密度計算結果');
-  const slenderness = positive(lengthM / thicknessM, '細長比計算結果');
+  const ebSlopeHzM2 = positiveDerived(ebFrequencyHz * lengthM ** 2, '頻率斜率計算結果');
+  const correctionPercent = positiveDerived((1 - ritzFrequencyHz / ebFrequencyHz) * 100, '修正百分比計算結果');
+  const periodMs = positiveDerived(1000 / frequencyHz, '週期計算結果');
+  const ebSlopeHzCm2 = positiveDerived(ebSlopeHzM2 * 1e4, '公分制頻率斜率計算結果');
+  const tipForceN = finite(tipForceForDeflection({ ...beam, displacementM: amplitudeM }), '端點作用力計算結果');
+  const linearMassKgM = positiveDerived(densityKgM3 * areaM2, '線密度計算結果');
+  const slenderness = positiveDerived(lengthM / thicknessM, '細長比計算結果');
   const amplitudeRatio = nonNegative(
     finiteDerived(amplitudeM / lengthM, amplitudeM, '振幅比計算結果'),
     '振幅比計算結果',
   );
   const decayTimeS = dampingRatio > 0
-    ? positive(1 / (dampingRatio * angularFrequencyRadS), '衰減時間計算結果')
-    : Infinity;
-  const seriesHz = frequencySeries(state, selectedModel);
-  return {
+    ? positiveDerived(1 / (dampingRatio * angularFrequencyRadS), '衰減時間計算結果')
+    : null;
+  const seriesHz = frequencySeries(beam, selectedModel);
+  return Object.freeze({
     beta,
     areaM2,
     inertiaM4,
@@ -260,5 +299,5 @@ export function modelSnapshot(state) {
     amplitudeRatio,
     decayTimeS,
     seriesHz,
-  };
+  });
 }

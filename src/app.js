@@ -41,6 +41,22 @@ const frozenCopy = (value) => {
   return value;
 };
 
+let publishedState;
+let publishedSnapshot;
+const publicApi = Object.freeze({
+  get state() { return publishedState; },
+  get snapshot() { return publishedSnapshot; },
+  get running() { return running; },
+  modelVersion: '1.1.0',
+  pause: () => setRunning(false),
+  resume: () => setRunning(true),
+});
+Object.defineProperty(window, '__SINGING_RULER__', {
+  value: publicApi,
+  writable: false,
+  configurable: false,
+});
+
 function setValidation(message = '', invalidControls = []) {
   $('#customValidation').textContent = message;
   for (const control of [controls.young, controls.density]) {
@@ -157,12 +173,8 @@ function updateOutputs() {
   drawRuler(phase);
   scheduleResultAnnouncement();
   document.documentElement.dataset.ready = 'true';
-  window.__SINGING_RULER__ = {
-    state: frozenCopy(currentState),
-    snapshot: frozenCopy(currentSnapshot),
-    get running() { return running; },
-    modelVersion: '1.1.0', pause: () => setRunning(false), resume: () => setRunning(true),
-  };
+  publishedState = frozenCopy(currentState);
+  publishedSnapshot = frozenCopy(currentSnapshot);
   return true;
 }
 

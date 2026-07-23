@@ -1,6 +1,7 @@
 import { cantileverModeShape } from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+let activeController = null;
 
 const STEP_TEXT = Object.freeze({
   1: {
@@ -35,6 +36,7 @@ function makePath(oscillation, amplitude = 54) {
 }
 
 export function initTheoryExplainer() {
+  if (activeController) return activeController;
   const root = document.querySelector('.theory-story');
   if (!root) return null;
 
@@ -58,6 +60,23 @@ export function initTheoryExplainer() {
   let previousTime = performance.now();
   let lastStepChange = previousTime;
 
+  const publicApi = Object.freeze({
+    initialized: true,
+    get step() { return step; },
+    get motionRunning() { return motionRunning; },
+    get autoPlaying() { return autoPlaying; },
+    setStep: (value) => setStep(value, { announce: false }),
+    setOscillation: (value) => setOscillation(value),
+    pause: () => setMotion(false),
+    play: () => setMotion(true),
+    getState: () => Object.freeze({ step, motionRunning, autoPlaying }),
+  });
+  Object.defineProperty(window, '__THEORY_EXPLAINER__', {
+    value: publicApi,
+    writable: false,
+    configurable: false,
+  });
+
   const massDots = Array.from({ length: 10 }, (_, index) => {
     const circle = document.createElementNS(SVG_NS, 'circle');
     circle.setAttribute('r', index % 2 ? '7' : '8');
@@ -72,18 +91,7 @@ export function initTheoryExplainer() {
     motionButton.textContent = motionRunning ? '暫停示意' : '播放示意';
   };
 
-  const publishState = () => {
-    window.__THEORY_EXPLAINER__ = {
-      initialized: true,
-      step,
-      motionRunning,
-      autoPlaying,
-      setStep: (value) => setStep(value, { announce: false }),
-      setOscillation: (value) => setOscillation(value),
-      pause: () => setMotion(false),
-      play: () => setMotion(true),
-    };
-  };
+  const publishState = () => {};
 
   function stopAuto({ restoreMotion = false } = {}) {
     if (!autoPlaying) return false;
@@ -245,5 +253,6 @@ export function initTheoryExplainer() {
   setStep(1, { announce: false });
   setMotion(motionRunning, { announce: false });
   requestAnimationFrame(tick);
-  return { getState: () => ({ step, motionRunning, autoPlaying }) };
+  activeController = publicApi;
+  return activeController;
 }

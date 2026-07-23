@@ -492,22 +492,59 @@ async function interactionChecks(page) {
 
   const snapshotImmutability = await page.evaluate(() => {
     const api = window.__SINGING_RULER__;
-    const before = { frequency: api.snapshot.frequencyHz, series: [...api.snapshot.seriesHz] };
+    const theory = window.__THEORY_EXPLAINER__;
+    const before = {
+      frequency: api.snapshot.frequencyHz,
+      series: [...api.snapshot.seriesHz],
+      theoryStep: theory.step,
+    };
     let arrayMutationThrew = false;
     try { api.snapshot.seriesHz.push(123); } catch { arrayMutationThrew = true; }
     try { api.snapshot.frequencyHz = 0; } catch { /* assignment may be silent outside strict mode */ }
+    try { api.state = Object.freeze({}); } catch { /* frozen container */ }
+    try { theory.step = 99; } catch { /* frozen container */ }
     return {
+      apiFrozen: Object.isFrozen(api),
+      theoryFrozen: Object.isFrozen(theory),
+      appGlobalWritable: Object.getOwnPropertyDescriptor(window, '__SINGING_RULER__').writable,
+      theoryGlobalWritable: Object.getOwnPropertyDescriptor(window, '__THEORY_EXPLAINER__').writable,
       stateFrozen: Object.isFrozen(api.state),
       snapshotFrozen: Object.isFrozen(api.snapshot),
       seriesFrozen: Object.isFrozen(api.snapshot.seriesHz),
       arrayMutationThrew,
       unchanged: api.snapshot.frequencyHz === before.frequency
-        && JSON.stringify(api.snapshot.seriesHz) === JSON.stringify(before.series),
+        && JSON.stringify(api.snapshot.seriesHz) === JSON.stringify(before.series)
+        && theory.step === before.theoryStep,
     };
   });
   assert.deepEqual(snapshotImmutability, {
-    stateFrozen: true, snapshotFrozen: true, seriesFrozen: true, arrayMutationThrew: true, unchanged: true,
-  }, 'published state and nested snapshot data are immutable copies');
+    apiFrozen: true,
+    theoryFrozen: true,
+    appGlobalWritable: false,
+    theoryGlobalWritable: false,
+    stateFrozen: true,
+    snapshotFrozen: true,
+    seriesFrozen: true,
+    arrayMutationThrew: true,
+    unchanged: true,
+  }, 'complete public API containers and nested publications are immutable');
+
+  const theoryIdempotence = await page.evaluate(async () => {
+    const beforeDots = document.querySelectorAll('#storyMassLayer .story-mass').length;
+    const beforeApi = window.__THEORY_EXPLAINER__;
+    const { initTheoryExplainer } = await import('./src/theory-explainer.js');
+    const first = initTheoryExplainer();
+    const second = initTheoryExplainer();
+    return {
+      beforeDots,
+      afterDots: document.querySelectorAll('#storyMassLayer .story-mass').length,
+      sameController: first === second,
+      samePublicApi: first === beforeApi,
+    };
+  });
+  assert.deepEqual(theoryIdempotence, {
+    beforeDots: 10, afterDots: 10, sameController: true, samePublicApi: true,
+  }, 'theory explainer initialization is idempotent');
 
   const validationLiveRegion = await page.evaluate(() => {
     const region = document.querySelector('#customValidation');

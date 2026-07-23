@@ -82,15 +82,20 @@ test('EB-mode Rayleigh quotient uses independently integrated rotary coefficient
 });
 
 test('static force controls displacement, not eigenfrequency', () => {
-  const force = tipForceForDeflection({ ...base, displacementM: 0.01 });
-  close(staticTipDeflection({ ...base, forceN: force }), 0.01);
+  const force = tipForceForDeflection({ ...base, displacementM: 0.005 });
+  close(force, 4.188368055555555);
+  close(staticTipDeflection({ ...base, forceN: force }), 0.005);
   close(eulerBernoulliFrequency({ ...base, forceN: force }), eulerBernoulliFrequency(base));
+  const staticTrialCoefficient = Math.sqrt(3 / (33 / 140)) / (2 * Math.PI);
+  const exactCoefficient = BETA_ROOTS[0] ** 2 / (2 * Math.PI);
+  close(staticTrialCoefficient, 0.5677900882513971);
+  close((staticTrialCoefficient / exactCoefficient - 1) * 100, 1.4651549447111334);
 });
 
 test('first four modal ratios are inharmonic', () => {
   const series = frequencySeries(base);
   const ratios = series.map((f) => f / series[0]);
-  [1, 6.266893025770666, 17.547481936106008, 34.38606115720301]
+  [1, 6.266893025770666, 17.54748193680845, 34.38606115720301]
     .forEach((expected, i) => close(ratios[i], expected, 1e-10));
 });
 
@@ -200,4 +205,82 @@ test('whole-state APIs reject malformed arguments with RangeError', () => {
     }
   }
   assert.throws(() => frequencySeries(null), RangeError);
+});
+
+test('all exported derived quantities reject subnormal outputs', () => {
+  assert.throws(() => rectangularSection(1, 6e-103), RangeError);
+  const subnormalFrequency = {
+    ...base,
+    lengthM: 1e150,
+    widthM: 1,
+    thicknessM: 1e-10,
+    youngPa: 1,
+    densityKgM3: 1,
+  };
+  assert.throws(() => eulerBernoulliFrequency(subnormalFrequency), RangeError);
+  assert.throws(() => frequencySeries(subnormalFrequency), RangeError);
+  assert.throws(() => tipStiffness({ ...base, lengthM: 1e105 }), RangeError);
+});
+
+test('state APIs snapshot known own data fields once and freeze publications', () => {
+  let knownGetterReads = 0;
+  const accessorState = { ...base };
+  Object.defineProperty(accessorState, 'lengthM', {
+    enumerable: true,
+    get() {
+      knownGetterReads += 1;
+      return base.lengthM;
+    },
+  });
+  const stateApis = [
+    eulerBernoulliFrequency,
+    rayleighRitzFrequency,
+    frequencySeries,
+    tipStiffness,
+    staticTipDeflection,
+    tipForceForDeflection,
+    modelSnapshot,
+  ];
+  for (const api of stateApis) assert.throws(() => api(accessorState), RangeError);
+  assert.equal(knownGetterReads, 0, 'known accessor getters are rejected without invocation');
+
+  let unrelatedGetterReads = 0;
+  const extraGetterState = { ...base, forceN: 1, displacementM: 0.001 };
+  Object.defineProperty(extraGetterState, 'unrelated', {
+    enumerable: true,
+    get() {
+      unrelatedGetterReads += 1;
+      throw new Error('must not run');
+    },
+  });
+  assert.doesNotThrow(() => staticTipDeflection(extraGetterState));
+  assert.doesNotThrow(() => tipForceForDeflection(extraGetterState));
+  assert.doesNotThrow(() => frequencySeries(extraGetterState));
+  const snapshot = modelSnapshot(extraGetterState);
+  assert.equal(unrelatedGetterReads, 0, 'unrelated getters are ignored');
+  assert.ok(Object.isFrozen(snapshot));
+  assert.ok(Object.isFrozen(snapshot.seriesHz));
+  assert.ok(Object.isFrozen(frequencySeries(base)));
+  assert.ok(Object.isFrozen(rectangularSection(base.widthM, base.thicknessM)));
+  assert.equal(Object.is(staticTipDeflection({ ...base, forceN: -0 }), -0), false);
+  assert.equal(Object.is(tipForceForDeflection({ ...base, displacementM: -0 }), -0), false);
+
+  const expectedNegativeZero = [false, true, false, true];
+  for (let mode = 1; mode <= 4; mode += 1) {
+    assert.equal(Object.is(cantileverModeShape(0, mode), -0), expectedNegativeZero[mode - 1]);
+  }
+
+  const undamped = modelSnapshot({ ...base, dampingRatio: -0 });
+  assert.equal(undamped.decayTimeS, null, 'undamped state has no finite decay time');
+  for (const [key, value] of Object.entries(undamped)) {
+    if (typeof value === 'number') assert.ok(Number.isFinite(value), `${key} is finite`);
+  }
+
+  for (const api of stateApis) {
+    for (const target of [{}, []]) {
+      const revocable = Proxy.revocable(target, {});
+      revocable.revoke();
+      assert.throws(() => api(revocable.proxy), RangeError);
+    }
+  }
 });
