@@ -4,6 +4,7 @@ import {
   cantileverModeShape,
   modelSnapshot,
 } from './model.js';
+import { initTheoryExplainer } from './theory-explainer.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -14,6 +15,7 @@ const controls = {
   amplitude: $('#amplitude'), mode: $('#mode'), model: $('#model'), speed: $('#speed'),
 };
 const defaults = Object.fromEntries(Object.entries(controls).map(([key, el]) => [key, el.value]));
+initTheoryExplainer();
 let running = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let phase = 0;
 let previousFrame = performance.now();

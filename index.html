@@ -81,25 +81,137 @@
         <article class="chapter-content">
           <p class="eyebrow">從最基本的原理</p>
           <h2 id="theory-title">三步走到懸臂梁頻率公式</h2>
-          <p class="section-lede">尺不是「一顆質量接一根彈簧」，而是一個每一小段都同時儲存彈性能、也具有慣性的連續系統。以下三個方程是整題的骨架。</p>
+          <p class="section-lede">先把尺想成一排彼此連在一起的小質點：每一段都會被彈性拉回，也都因為有質量而不願立刻改變速度。看懂「彈性＋慣性＋兩端限制」，頻率公式就不再像突然冒出來。</p>
 
-          <div class="equation-bridge" role="group" aria-label="核心推導的三個方程">
-            <div class="equation-card">
-              <span class="step">01</span>
-              <h3>曲率產生彎矩</h3>
-              <div class="formula" role="math" aria-label="彎矩 M 等於負的楊氏係數 E 乘以截面二次矩 I，再乘以位移 w 對位置 x 的二階偏導數。">M = −EI ∂<sup>2</sup>w / ∂x<sup>2</sup></div>
+          <aside class="student-hook" aria-label="高中生閱讀提示">
+            <strong>先記住一條故事線：</strong>
+            <span>壓彎尺 → 尺產生回復作用 → 每一小段開始加速 → 固定端與自由端只允許某些振動形狀 → 每個形狀有自己的頻率。</span>
+          </aside>
+
+          <section class="theory-story" aria-labelledby="story-title">
+            <div class="story-copy">
+              <p class="tech-label">90-SECOND VISUAL GUIDE</p>
+              <h3 id="story-title">先看尺怎麼動，再讀公式</h3>
+              <p class="story-intro">按1、2、3逐步閱讀，或讓動畫自動播放。圖中的位移與時間都經過視覺放大，重點是因果關係，不是實際比例。</p>
+
+              <div class="story-tabs" role="tablist" aria-label="懸臂梁頻率公式三步講解">
+                <button id="story-tab-1" type="button" role="tab" aria-selected="true" aria-controls="story-panel-1" tabindex="0" data-theory-step="1"><b>1</b><span>壓彎</span></button>
+                <button id="story-tab-2" type="button" role="tab" aria-selected="false" aria-controls="story-panel-2" tabindex="-1" data-theory-step="2"><b>2</b><span>會加速</span></button>
+                <button id="story-tab-3" type="button" role="tab" aria-selected="false" aria-controls="story-panel-3" tabindex="-1" data-theory-step="3"><b>3</b><span>選頻率</span></button>
+              </div>
+
+              <div class="story-panels">
+                <section id="story-panel-1" class="story-panel" role="tabpanel" aria-labelledby="story-tab-1" data-theory-panel="1">
+                  <p class="student-question">想像一下：塑膠尺彎得越厲害，手感是不是越「硬」、越想彈回來？</p>
+                  <h4>第1步：把「彎曲」翻成回復作用</h4>
+                  <p>用 <i>w(x,t)</i> 表示尺在位置 <i>x</i>、時間 <i>t</i> 的上下位移。曲線彎得多不多，可用它對位置的二階變化表示。材料越硬（<i>E</i>大）、截面越難彎（<i>I</i>大），內部彈性彎矩就越大。</p>
+                  <div class="concept-chain" role="group" aria-label="彎曲程度增加，彎矩增加，回復作用增加"><span>彎曲更明顯</span><b>→</b><span>彎矩更大</span><b>→</b><span>更想彈回</span></div>
+                  <div class="formula story-formula" role="math" aria-label="彎矩 M 等於負的楊氏係數 E 乘以截面二次矩 I，再乘以位移 w 對位置 x 的二階偏導數。">M = −EI ∂<sup>2</sup>w / ∂x<sup>2</sup></div>
+                  <p class="step-takeaway"><strong>這一步得到：</strong>知道尺為什麼有回復作用，但還不知道它會以多快的速度振動。</p>
+                </section>
+
+                <section id="story-panel-2" class="story-panel" role="tabpanel" aria-labelledby="story-tab-2" data-theory-panel="2" hidden>
+                  <p class="student-question">放手後，尺為什麼不會停在原位，而是衝過平衡位置、來回擺動？</p>
+                  <h4>第2步：對每一小段使用 F = ma</h4>
+                  <p>相鄰小段的彎矩不完全一樣，會先形成剪力；相鄰位置的剪力再有差異，才造成某一小段的淨力。每一小段又有質量，所以淨力使它產生上下加速度；它衝過平衡位置則是慣性的結果。</p>
+                  <div class="derivative-legend" role="group" aria-label="梁方程中兩個導數的白話意思"><span><b>∂²w/∂t²</b>：上下加速度</span><span><b>∂⁴w/∂x⁴</b>：彎矩經過兩次沿尺位置的比較，得到淨力</span></div>
+                  <div class="formula story-formula" role="math" aria-label="楊氏係數 E 乘以截面二次矩 I 乘以位移 w 對位置 x 的四階偏導數，加上密度 rho 乘以截面積 A 乘以位移 w 對時間 t 的二階偏導數，等於零。">EI ∂<sup>4</sup>w / ∂x<sup>4</sup> + ρA ∂<sup>2</sup>w / ∂t<sup>2</sup> = 0</div>
+                  <p class="equation-translation"><b>白話翻譯：</b>彈性造成的淨力＋質量造成的慣性反應＝0。這就是「連續版」的彈簧振子方程。</p>
+                  <p class="step-takeaway"><strong>這一步得到：</strong>有了描述整把尺如何運動的方程，但它仍允許很多種數學解。</p>
+                </section>
+
+                <section id="story-panel-3" class="story-panel" role="tabpanel" aria-labelledby="story-tab-3" data-theory-panel="3" hidden>
+                  <p class="student-question">吉他弦不是任何頻率都能形成穩定駐波；一端固定的尺也一樣。</p>
+                  <h4>第3步：用兩端限制篩選「允許的形狀」</h4>
+                  <p>桌邊的固定端既不能上下移動，也不能轉動；自由端沒有外加彎矩與剪力。只有同時滿足這四項條件的振動形狀能長久存在，我們稱它們為模態。</p>
+                  <div class="boundary-grid" role="group" aria-label="懸臂梁四個邊界條件">
+                    <span><b>固定端</b>位移 = 0</span><span><b>固定端</b>斜率 = 0</span><span><b>自由端</b>彎矩 = 0</span><span><b>自由端</b>剪力 = 0</span>
+                  </div>
+                  <div class="formula story-formula" role="math" aria-label="雙曲餘弦 beta n 乘以餘弦 beta n 等於負一。">cosh β<sub>n</sub> · cos β<sub>n</sub> = −1</div>
+                  <p><i>β<sub>n</sub></i> 可把它想成「第 <i>n</i> 種允許形狀的編號」。第一個是1.8751，代回運動方程就得到第一模態頻率。</p>
+                  <div class="formula result story-formula" role="math" aria-label="第 n 模態頻率 f n 等於 beta n 的平方除以二 pi 與長度 L 平方的乘積，再乘以 EI 除以 rho A 的平方根。">f<sub>n</sub> = [β<sub>n</sub><sup>2</sup>/(2πL<sup>2</sup>)] √(EI/ρA)</div>
+                  <p class="step-takeaway"><strong>這一步得到：</strong>邊界條件給出 <i>β<sub>n</sub></i>，運動方程則把它變成真正的頻率。</p>
+                </section>
+              </div>
+
+              <div class="story-controls">
+                <button id="theoryAuto" class="button accent" type="button">自動播放三步</button>
+                <button id="theoryMotion" class="button secondary" type="button">暫停示意</button>
+              </div>
+              <p id="theoryStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true">目前顯示第1步：彎曲產生回復作用。</p>
             </div>
-            <div class="equation-card">
-              <span class="step">02</span>
-              <h3>牛頓第二定律</h3>
-              <div class="formula" role="math" aria-label="楊氏係數 E 乘以截面二次矩 I 乘以位移 w 對位置 x 的四階偏導數，加上密度 rho 乘以截面積 A 乘以位移 w 對時間 t 的二階偏導數，等於零。">EI ∂<sup>4</sup>w / ∂x<sup>4</sup> + ρA ∂<sup>2</sup>w / ∂t<sup>2</sup> = 0</div>
+
+            <div class="story-visual" role="group" aria-label="三步力學示意動畫">
+              <svg id="theorySvg" viewBox="0 0 760 360" role="img" aria-labelledby="theorySvgTitle theorySvgDesc">
+                <title id="theorySvgTitle">懸臂尺從彎曲、加速到形成模態的三步示意</title>
+                <desc id="theorySvgDesc">目前顯示第1步：手向下壓自由端，尺的彎曲與回復作用增加。</desc>
+                <defs>
+                  <linearGradient id="storyBeamGradient" x1="0" x2="1"><stop stop-color="#18e299"/><stop offset="1" stop-color="#7fffd0"/></linearGradient>
+                  <marker id="storyArrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#ffcf70"/></marker>
+                  <marker id="storyArrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#18e299"/></marker>
+                  <marker id="storyArrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#79baff"/></marker>
+                </defs>
+                <rect class="story-grid-bg" x="0" y="0" width="760" height="360" rx="22"/>
+                <line class="story-reference" x1="92" y1="170" x2="704" y2="170"/>
+                <g class="story-clamp"><rect x="42" y="98" width="50" height="144" rx="6"/><line x1="54" y1="108" x2="82" y2="132"/><line x1="54" y1="138" x2="82" y2="162"/><line x1="54" y1="168" x2="82" y2="192"/><line x1="54" y1="198" x2="82" y2="222"/></g>
+
+                <g data-theory-visual="1">
+                  <path id="storyBeam1" class="story-beam" d="M92 170 C280 170 510 182 704 230"/>
+                  <line id="storyPressArrow" class="story-force-arrow" x1="704" y1="90" x2="704" y2="205" marker-end="url(#storyArrowAmber)"/>
+                  <text class="story-svg-label" x="704" y="76" text-anchor="end">手向下壓</text>
+                  <path class="story-return-arrow" d="M560 222 Q610 187 648 180" marker-end="url(#storyArrowGreen)"/>
+                  <text class="story-svg-label story-green" x="472" y="276">彈性想把尺拉回</text>
+                  <text class="story-svg-note" x="104" y="324">彎曲越明顯，內部彎矩越大</text>
+                </g>
+
+                <g data-theory-visual="2" hidden>
+                  <path id="storyBeam2" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
+                  <g id="storyMassLayer" aria-hidden="true"></g>
+                  <line id="storyAccelArrow" class="story-accel-arrow" x1="520" y1="235" x2="520" y2="178" marker-end="url(#storyArrowBlue)"/>
+                  <text class="story-svg-label" x="704" y="76" text-anchor="end">藍箭頭：淨力／加速度方向</text>
+                  <text class="story-svg-note" x="104" y="324">每一小段都有彈性，也都有質量</text>
+                </g>
+
+                <g data-theory-visual="3" hidden>
+                  <path id="storyModeEnvelope" class="story-mode-envelope" d="M92 170 C280 170 510 182 704 218"/>
+                  <path id="storyBeam3" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
+                  <circle class="boundary-dot fixed" cx="92" cy="170" r="10"/>
+                  <circle class="boundary-dot free" cx="704" cy="170" r="10"/>
+                  <text class="story-svg-label" x="102" y="78">固定端：不能移動、不能轉動</text>
+                  <text class="story-svg-label" x="398" y="292">自由端：彎矩與剪力為0</text>
+                  <text class="story-svg-note" x="104" y="252">虛線：第一模態最大位移形狀</text>
+                  <g class="mode-tags"><text x="186" y="326">β₁=1.875</text><text x="366" y="326">β₂=4.694</text><text x="546" y="326">β₃=7.855</text></g>
+                </g>
+              </svg>
+              <p id="theoryVisualCaption" class="story-caption"><b>第1步：</b>先把自由端向下壓。彎曲是被視覺放大的概念示意。</p>
             </div>
-            <div class="equation-card">
-              <span class="step">03</span>
-              <h3>邊界選出頻率</h3>
-              <div class="formula" role="math" aria-label="雙曲餘弦 beta n 乘以餘弦 beta n 等於負一。">cosh β<sub>n</sub> · cos β<sub>n</sub> = −1</div>
+          </section>
+
+          <section class="formula-map" aria-labelledby="formula-map-title">
+            <p class="tech-label">FORMULA MAP</p>
+            <h3 id="formula-map-title">現在再看三個方程：每一個都在回答不同問題</h3>
+            <div class="equation-bridge" role="group" aria-label="核心推導的三個方程">
+              <div class="equation-card">
+                <span class="step">01 · 幾何 → 彈性</span>
+                <h4>尺彎多少，回復作用多大？</h4>
+                <div class="formula" role="math" aria-label="彎矩 M 等於負的楊氏係數 E 乘以截面二次矩 I，再乘以位移 w 對位置 x 的二階偏導數。">M = −EI ∂<sup>2</sup>w / ∂x<sup>2</sup></div>
+                <p>把看得見的彎曲，翻成內部彈性彎矩。</p>
+              </div>
+              <div class="equation-card">
+                <span class="step">02 · 淨力 → 加速度</span>
+                <h4>每一小段接下來怎麼動？</h4>
+                <div class="formula" role="math" aria-label="楊氏係數 E 乘以截面二次矩 I 乘以位移 w 對位置 x 的四階偏導數，加上密度 rho 乘以截面積 A 乘以位移 w 對時間 t 的二階偏導數，等於零。">EI ∂<sup>4</sup>w / ∂x<sup>4</sup> + ρA ∂<sup>2</sup>w / ∂t<sup>2</sup> = 0</div>
+                <p>這就是連續尺版本的 <i>F=ma</i>。</p>
+              </div>
+              <div class="equation-card">
+                <span class="step">03 · 兩端限制 → 模態</span>
+                <h4>哪些形狀與頻率真的被允許？</h4>
+                <div class="formula" role="math" aria-label="雙曲餘弦 beta n 乘以餘弦 beta n 等於負一。">cosh β<sub>n</sub> · cos β<sub>n</sub> = −1</div>
+                <p>四個邊界條件篩出離散的 <i>β<sub>n</sub></i>。</p>
+              </div>
             </div>
-          </div>
+            <div class="memory-line"><b>一口氣串起來：</b>材料與截面決定「多難彎」；密度與截面積決定「多難加速」；長度與兩端限制決定「允許哪種振動形狀」。</div>
+          </section>
 
           <a class="inline-cta" href="#lab">已懂核心？跳到互動實驗 →</a>
 

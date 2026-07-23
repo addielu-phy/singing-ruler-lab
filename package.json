@@ -1,13 +1,13 @@
 {
   "name": "singing-ruler-lab",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "serve": "python -m http.server 9057 --bind 127.0.0.1",
     "qa": "node tools/browser-qa.mjs",
-    "check": "npm test && node --check src/model.js && node --check src/app.js"
+    "check": "npm test && node --check src/model.js && node --check src/app.js && node --check src/theory-explainer.js && node --check tools/browser-qa.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

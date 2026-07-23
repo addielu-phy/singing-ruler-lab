@@ -41,10 +41,34 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
     };
     const focusColor = getComputedStyle(document.querySelector('#reset')).outlineColor;
     const focusContrast = (luminance('rgb(255,255,255)') + 0.05) / (luminance(focusColor) + 0.05);
+    const theoryApi = window.__THEORY_EXPLAINER__;
+    const theorySteps = [1, 2, 3].map((step) => {
+      theoryApi?.setStep(step);
+      const panel = document.querySelector(`[data-theory-panel="${step}"]`);
+      const visual = document.querySelector(`[data-theory-visual="${step}"]`);
+      const labels = [...visual.querySelectorAll('text')];
+      const clippedLabels = labels.map((label) => {
+        const box = label.getBBox();
+        return { text: label.textContent, x: box.x, y: box.y, right: box.x + box.width, bottom: box.y + box.height };
+      }).filter((box) => box.x < -1 || box.y < -1 || box.right > 761 || box.bottom > 361);
+      return {
+        step,
+        visiblePanels: [...document.querySelectorAll('[data-theory-panel]')].filter((x) => !x.hidden).length,
+        visibleVisuals: [...document.querySelectorAll('[data-theory-visual]')].filter((x) => !x.hasAttribute('hidden')).length,
+        selectedTabs: [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].length,
+        panelOverflow: panel.scrollWidth > panel.clientWidth + 1,
+        formulaOverflow: [...panel.querySelectorAll('.formula')].some((x) => x.scrollWidth > x.clientWidth + 1),
+        minLabelHeight: Math.min(...labels.map((x) => x.getBoundingClientRect().height)),
+        clippedLabels,
+      };
+    });
+    theoryApi?.setStep(1);
     return {
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
       theoryBeforeLab: Boolean(theory.compareDocumentPosition(lab) & Node.DOCUMENT_POSITION_FOLLOWING),
+      theoryReady: Boolean(theoryApi && document.querySelectorAll('[role="tab"]').length === 3),
+      theorySteps,
       formulaCount: formulas.length,
       mathLabelsValid: formulas.every((x) => (x.getAttribute('aria-label') || '').length >= 18 && /[一二三四五六七八九十等於乘除平方根加負]/.test(x.getAttribute('aria-label'))),
       unnamedAsides: unnamedAsides.length,
@@ -68,6 +92,17 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
   assert.equal(result.clientWidth, expectedWidth, `${label}: exact viewport`);
   assert.equal(result.scrollWidth, expectedWidth, `${label}: page horizontal overflow`);
   assert.equal(result.theoryBeforeLab, true, `${label}: theory before lab`);
+  assert.equal(result.theoryReady, true, `${label}: theory explainer API and three tabs ready`);
+  assert.equal(result.theorySteps.length, 3, `${label}: all three theory steps inspected`);
+  result.theorySteps.forEach((step) => {
+    assert.equal(step.visiblePanels, 1, `${label}: step ${step.step} has one visible panel`);
+    assert.equal(step.visibleVisuals, 1, `${label}: step ${step.step} has one visible visual`);
+    assert.equal(step.selectedTabs, 1, `${label}: step ${step.step} has one selected tab`);
+    assert.equal(step.panelOverflow, false, `${label}: step ${step.step} panel overflow`);
+    assert.equal(step.formulaOverflow, false, `${label}: step ${step.step} formula overflow`);
+    assert.ok(step.minLabelHeight >= 10, `${label}: step ${step.step} SVG labels readable (${step.minLabelHeight}px)`);
+    assert.deepEqual(step.clippedLabels, [], `${label}: step ${step.step} SVG labels clipped`);
+  });
   assert.ok(result.formulaCount >= 14, `${label}: formula count`);
   assert.equal(result.mathLabelsValid, true, `${label}: complete Traditional Chinese math labels`);
   assert.equal(result.unnamedAsides, 0, `${label}: unnamed complementary landmarks`);
@@ -105,6 +140,27 @@ async function interactionChecks(page) {
   const setRange = async (id, value) => {
     await page.locator(`#${id}`).evaluate((el, v) => { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); }, value);
   };
+  await page.locator('#story-tab-2').click();
+  assert.equal(await page.locator('#story-tab-2').getAttribute('aria-selected'), 'true', 'theory tab click selects step 2');
+  assert.equal(await page.locator('#story-panel-2').isVisible(), true, 'theory step 2 panel visible');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.activeElement?.id), 'story-tab-3', 'theory tabs support ArrowRight focus');
+  assert.equal(await page.locator('#story-tab-3').getAttribute('aria-selected'), 'true', 'ArrowRight selects theory step 3');
+  assert.match(await page.locator('#theorySvgDesc').textContent(), /第3步.*模態/, 'SVG description follows selected theory step');
+  await page.locator('#theoryMotion').click();
+  const theoryPaused1 = await page.locator('#storyBeam3').getAttribute('d');
+  await page.waitForTimeout(250);
+  const theoryPaused2 = await page.locator('#storyBeam3').getAttribute('d');
+  assert.equal(theoryPaused1, theoryPaused2, 'theory pause keeps visual state stable');
+  assert.equal(await page.locator('#theoryMotion').textContent(), '播放示意', 'theory pause action label updates');
+  await page.locator('#theoryMotion').click();
+  await page.locator('#theoryAuto').click();
+  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.autoPlaying), true, 'theory autoplay starts');
+  await page.waitForTimeout(5000);
+  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.step), 1, 'theory autoplay advances from step 3 to step 1');
+  await page.locator('#theoryAuto').click();
+  assert.equal(await page.evaluate(() => window.__THEORY_EXPLAINER__.autoPlaying), false, 'theory autoplay stops');
+
   const base = await getFrequency();
   await setRange('length', 12);
   const doubledLength = await getFrequency();
@@ -182,7 +238,7 @@ async function interactionChecks(page) {
   const labTop = await page.locator('#lab').evaluate((x) => x.getBoundingClientRect().top);
   assert.ok(labTop >= headerHeight - 1, 'hash target clears sticky header');
 
-  report.interactions = { baseHz: base, doubledLengthHz: doubledLength, doubledThicknessHz: doubledThickness, secondModeHz: secondMode, rotaryRitzHz: corrected, liveResult: true, audioPlayback: true, audioStopStable: true, pauseStable: true, skipFocus: true, hashFocus: true };
+  report.interactions = { theoryTabs: true, theoryKeyboard: true, theoryPauseStable: true, theoryAutoplay: true, baseHz: base, doubledLengthHz: doubledLength, doubledThicknessHz: doubledThickness, secondModeHz: secondMode, rotaryRitzHz: corrected, liveResult: true, audioPlayback: true, audioStopStable: true, pauseStable: true, skipFocus: true, hashFocus: true };
 }
 
 try {
@@ -209,7 +265,15 @@ try {
   const { page: reducedPage } = await loadPage(reduced, 'reduced-motion');
   assert.equal(await reducedPage.locator('#toggleMotion').textContent(), '繼續動畫');
   assert.equal(await reducedPage.evaluate(() => window.__SINGING_RULER__.running), false);
+  assert.equal(await reducedPage.locator('#theoryMotion').textContent(), '播放示意');
+  assert.equal(await reducedPage.evaluate(() => window.__THEORY_EXPLAINER__.motionRunning), false);
+  await reducedPage.locator('#theoryAuto').click();
+  assert.equal(await reducedPage.evaluate(() => window.__THEORY_EXPLAINER__.autoPlaying && window.__THEORY_EXPLAINER__.motionRunning), true, 'explicit theory autoplay overrides reduced motion');
+  await reducedPage.locator('#theoryAuto').click();
+  await reducedPage.locator('#theoryMotion').click();
+  assert.equal(await reducedPage.evaluate(() => window.__THEORY_EXPLAINER__.motionRunning), false, 'theory animation can be paused again');
   report.interactions.reducedMotionStartsPaused = true;
+  report.interactions.reducedMotionTheoryOptIn = true;
   await reduced.close();
 
   await fs.writeFile(`${outDir}/report.json`, JSON.stringify(report, null, 2));
