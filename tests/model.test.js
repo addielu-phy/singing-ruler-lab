@@ -7,6 +7,7 @@ import {
   eulerBernoulliFrequency,
   rayleighRitzFrequency,
   frequencySeries,
+  tipStiffness,
   staticTipDeflection,
   tipForceForDeflection,
   cantileverModeShape,
@@ -107,4 +108,96 @@ test('mode rejects coercive, fractional, and non-finite values', () => {
     assert.throws(() => eulerBernoulliFrequency({ ...base, mode }), RangeError);
     assert.throws(() => cantileverModeShape(0.5, mode), RangeError);
   }
+});
+
+test('beam model identifier rejects unknown and coercive values', () => {
+  const invalidModels = ['', 'EB', 'other', null, true, false, 0, {}, [], Symbol('eb'), 1n];
+  for (const model of invalidModels) {
+    assert.throws(() => frequencySeries(base, model), RangeError);
+    assert.throws(() => modelSnapshot({ ...base, model }), RangeError);
+  }
+});
+
+test('mode shape position requires a primitive finite number', () => {
+  const invalidPositions = ['0.5', true, false, null, Number.NaN, Infinity, -Infinity, {}, [0.5], Symbol('x'), 1n];
+  for (const xRatio of invalidPositions) {
+    assert.throws(() => cantileverModeShape(xRatio, 1), RangeError);
+  }
+  close(cantileverModeShape(-1, 1), 0, 0);
+  close(cantileverModeShape(2, 1), 1, 1e-10);
+});
+
+test('numerical model rejects IEEE-754 underflow, overflow, and invalid snapshot scalars', () => {
+  assert.throws(() => rectangularSection(Number.MIN_VALUE, Number.MIN_VALUE), RangeError);
+  assert.throws(() => rectangularSection(Number.MAX_VALUE, 2), RangeError);
+  const hostileStates = [
+    { ...base, lengthM: Number.MIN_VALUE },
+    { ...base, lengthM: Number.MAX_VALUE },
+    { ...base, widthM: Number.MIN_VALUE },
+    { ...base, thicknessM: Number.MIN_VALUE },
+    { ...base, youngPa: Number.MAX_VALUE, densityKgM3: Number.MIN_VALUE },
+  ];
+  for (const state of hostileStates) {
+    assert.throws(() => eulerBernoulliFrequency(state), RangeError);
+    assert.throws(() => modelSnapshot(state), RangeError);
+  }
+  for (const amplitudeM of [Number.NaN, Infinity, -1]) {
+    assert.throws(() => modelSnapshot({ ...base, amplitudeM }), RangeError);
+  }
+  for (const dampingRatio of [Number.NaN, Infinity, -0.1]) {
+    assert.throws(() => modelSnapshot({ ...base, dampingRatio }), RangeError);
+  }
+  assert.throws(() => tipForceForDeflection({ ...base, displacementM: Number.MAX_VALUE }), RangeError);
+});
+
+test('nonzero force, displacement, and amplitude never silently underflow to zero', () => {
+  assert.throws(() => staticTipDeflection({ ...base, forceN: Number.MIN_VALUE }), RangeError);
+  assert.throws(() => tipForceForDeflection({ ...base, youngPa: 1e5, displacementM: Number.MIN_VALUE }), RangeError);
+  assert.throws(() => modelSnapshot({ ...base, youngPa: 1e5, amplitudeM: Number.MIN_VALUE }), RangeError);
+  assert.throws(() => modelSnapshot({ ...base, lengthM: 2, youngPa: 1e5, amplitudeM: Number.MIN_VALUE }), RangeError);
+  assert.ok(cantileverModeShape(1e-10, 1) > 0, 'stable small-x mode shape remains representable');
+  assert.throws(() => cantileverModeShape(Number.MIN_VALUE, 1), RangeError);
+  assert.throws(() => cantileverModeShape(4e-163, 2), RangeError);
+  assert.throws(() => cantileverModeShape(1e-162, 1), RangeError);
+  const subnormalMidpoints = [
+    [1, 1.1854055391239837e-162],
+    [2, 4.735227089800317e-163],
+    [3, 2.82982481249453e-163],
+    [4, 2.021509267329591e-163],
+  ];
+  const boundaryLeaks = [
+    [3, 2.68568105324688602e-155],
+    [4, 1.91853895486893788e-155],
+  ];
+  for (const [mode, x] of boundaryLeaks) {
+    assert.throws(() => cantileverModeShape(x, mode), RangeError);
+  }
+  for (const [mode, x] of subnormalMidpoints) {
+    assert.throws(() => cantileverModeShape(x, mode), RangeError);
+    assert.throws(() => cantileverModeShape(1e-160, mode), RangeError);
+    assert.ok(Number.isFinite(cantileverModeShape(1e-153, mode)), `mode ${mode} accepts normal-range tiny shape`);
+  }
+  for (let mode = 1; mode <= 4; mode += 1) {
+    const thresholdX = 1e-2 / BETA_ROOTS[mode - 1];
+    const lower = cantileverModeShape(thresholdX * (1 - 1e-10), mode);
+    const upper = cantileverModeShape(thresholdX * (1 + 1e-10), mode);
+    assert.ok(Math.abs((upper - lower) / lower) < 1e-8, `mode ${mode} is continuous at Taylor threshold`);
+  }
+});
+
+test('whole-state APIs reject malformed arguments with RangeError', () => {
+  const stateApis = [
+    eulerBernoulliFrequency,
+    rayleighRitzFrequency,
+    tipStiffness,
+    staticTipDeflection,
+    tipForceForDeflection,
+    modelSnapshot,
+  ];
+  for (const api of stateApis) {
+    for (const state of [null, undefined, [], 'state', true, 1, Symbol('state'), 1n]) {
+      assert.throws(() => api(state), RangeError);
+    }
+  }
+  assert.throws(() => frequencySeries(null), RangeError);
 });

@@ -78,12 +78,16 @@ function setRangeText(id, text, ariaText = text) {
 }
 
 function updateMaterialInputs() {
-  const custom = controls.material.value === 'custom';
+  const key = controls.material.value;
+  if (key !== 'custom' && !Object.hasOwn(MATERIALS, key)) {
+    throw new RangeError('材料必須是已知預設或custom');
+  }
+  const custom = key === 'custom';
   $('.custom-material').hidden = !custom;
   controls.young.disabled = !custom;
   controls.density.disabled = !custom;
   if (!custom) {
-    const material = MATERIALS[controls.material.value];
+    const material = MATERIALS[key];
     controls.young.value = material.youngPa / 1e9;
     controls.density.value = material.densityKgM3;
   }
@@ -92,7 +96,12 @@ function updateMaterialInputs() {
 function updateOutputs() {
   clearTimeout(announcementTimer);
   announcementTimer = undefined;
-  updateMaterialInputs();
+  try {
+    updateMaterialInputs();
+  } catch (error) {
+    setValidation(`目前輸入無法計算：${error.message}`);
+    return false;
+  }
   const invalidControls = invalidCustomControls();
   if (invalidControls.length) {
     const messages = [];

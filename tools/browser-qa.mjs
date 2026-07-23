@@ -566,6 +566,37 @@ async function interactionChecks(page) {
   assert.equal(await page.locator('#customValidation').textContent(), '', 'valid custom inputs clear validation text while retaining the live region');
   await page.locator('#reset').click();
 
+  const stableEnumSnapshot = await page.evaluate(() => JSON.stringify(window.__SINGING_RULER__.snapshot));
+  await page.evaluate(() => {
+    const select = document.querySelector('#model');
+    select.append(new Option('hostile', '__hostile_model__'));
+    select.value = '__hostile_model__';
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  assert.match(await page.locator('#customValidation').textContent(), /梁模型/, 'unknown model identifier shows validation');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__SINGING_RULER__.snapshot)), stableEnumSnapshot, 'unknown model retains the last valid snapshot');
+  await page.evaluate(() => {
+    const select = document.querySelector('#model');
+    select.querySelector('[value="__hostile_model__"]').remove();
+    select.value = 'eb';
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.evaluate(() => {
+    const select = document.querySelector('#material');
+    select.append(new Option('hostile', '__hostile_material__'));
+    select.value = '__hostile_material__';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  assert.match(await page.locator('#customValidation').textContent(), /材料/, 'unknown material identifier shows validation');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__SINGING_RULER__.snapshot)), stableEnumSnapshot, 'unknown material retains the last valid snapshot');
+  await page.evaluate(() => {
+    const select = document.querySelector('#material');
+    select.querySelector('[value="__hostile_material__"]').remove();
+    select.value = 'stainless';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  assert.equal(await page.locator('#customValidation').textContent(), '', 'restoring valid enum identifiers clears validation');
+
   await page.evaluate(() => { location.hash = '#%'; });
   await page.waitForTimeout(50);
   assert.equal(await page.evaluate(() => Boolean(window.__SINGING_RULER__?.snapshot?.frequencyHz)), true, 'malformed hash is ignored without breaking the app');
