@@ -53,10 +53,10 @@ export function rectangularSection(widthM, thicknessM) {
 }
 
 function normalizedMode(mode) {
-  const index = Math.round(Number(mode)) - 1;
-  if (index < 0 || index >= BETA_ROOTS.length) {
-    throw new RangeError('模態必須介於1與4');
+  if (typeof mode !== 'number' || !Number.isInteger(mode) || mode < 1 || mode > BETA_ROOTS.length) {
+    throw new RangeError('模態必須是1至4的整數');
   }
+  const index = mode - 1;
   return { index, beta: BETA_ROOTS[index] };
 }
 

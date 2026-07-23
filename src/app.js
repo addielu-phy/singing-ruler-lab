@@ -33,6 +33,27 @@ const fmt = (value, digits = 2) => Number(value).toLocaleString('zh-TW', {
   maximumFractionDigits: digits,
 });
 
+const frozenCopy = (value) => {
+  if (Array.isArray(value)) return Object.freeze(value.map(frozenCopy));
+  if (value && typeof value === 'object') {
+    return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, frozenCopy(nested)])));
+  }
+  return value;
+};
+
+function setValidation(message = '', invalidControls = []) {
+  $('#customValidation').textContent = message;
+  for (const control of [controls.young, controls.density]) {
+    control.setAttribute('aria-invalid', String(invalidControls.includes(control)));
+  }
+}
+
+function invalidCustomControls() {
+  if (controls.material.value !== 'custom') return [];
+  return [controls.young, controls.density].filter((control) => !control.validity.valid
+    || control.value.trim() === '' || !Number.isFinite(Number(control.value)));
+}
+
 function stateFromControls() {
   const key = controls.material.value;
   const preset = key === 'custom' ? {
@@ -69,9 +90,40 @@ function updateMaterialInputs() {
 }
 
 function updateOutputs() {
+  clearTimeout(announcementTimer);
+  announcementTimer = undefined;
   updateMaterialInputs();
-  currentState = stateFromControls();
-  currentSnapshot = modelSnapshot(currentState);
+  const invalidControls = invalidCustomControls();
+  if (invalidControls.length) {
+    const messages = [];
+    if (invalidControls.includes(controls.young)) messages.push('楊氏係數請輸入0.1至500 GPa之間的數值。');
+    if (invalidControls.includes(controls.density)) messages.push('密度請輸入100至25,000 kg/m³之間的數值。');
+    setValidation(messages.join(' '), invalidControls);
+    return false;
+  }
+  let nextState;
+  let nextSnapshot;
+  try {
+    nextState = stateFromControls();
+    nextSnapshot = modelSnapshot(nextState);
+    const finiteValues = [
+      nextSnapshot.frequencyHz,
+      nextSnapshot.ebFrequencyHz,
+      nextSnapshot.ritzFrequencyHz,
+      nextSnapshot.periodMs,
+      nextSnapshot.tipForceN,
+      nextSnapshot.massKg,
+      nextSnapshot.ebSlopeHzCm2,
+      ...nextSnapshot.seriesHz,
+    ];
+    if (!finiteValues.every(Number.isFinite)) throw new RangeError('計算結果超出可顯示範圍');
+  } catch (error) {
+    setValidation(`目前輸入無法計算：${error.message}`);
+    return false;
+  }
+  setValidation();
+  currentState = nextState;
+  currentSnapshot = nextSnapshot;
   const s = currentSnapshot;
   setRangeText('length', `${fmt(currentState.lengthM * 100, 1)} cm`, `有效長度${fmt(currentState.lengthM * 100, 1)}公分`);
   setRangeText('thickness', `${fmt(currentState.thicknessM * 1000, 2)} mm`, `彎曲厚度${fmt(currentState.thicknessM * 1000, 2)}毫米`);
@@ -97,9 +149,12 @@ function updateOutputs() {
   scheduleResultAnnouncement();
   document.documentElement.dataset.ready = 'true';
   window.__SINGING_RULER__ = {
-    state: { ...currentState }, snapshot: { ...currentSnapshot }, running,
+    state: frozenCopy(currentState),
+    snapshot: frozenCopy(currentSnapshot),
+    get running() { return running; },
     modelVersion: '1.1.0', pause: () => setRunning(false), resume: () => setRunning(true),
   };
+  return true;
 }
 
 function scheduleResultAnnouncement() {
@@ -246,7 +301,6 @@ function drawLengthChart() {
 function setRunning(next, { announce = false, reducedMotion = false } = {}) {
   running = Boolean(next);
   $('#toggleMotion').textContent = running ? '暫停動畫' : '繼續動畫';
-  if (window.__SINGING_RULER__) window.__SINGING_RULER__.running = running;
   if (announce) {
     $('#motionStatus').textContent = reducedMotion
       ? '偵測到減少動態偏好，尺的振動動畫已暫停。'
@@ -338,7 +392,12 @@ motionPreference.addEventListener('change', (event) => {
 });
 
 function focusHashTarget() {
-  const id = decodeURIComponent(location.hash.slice(1));
+  let id;
+  try {
+    id = decodeURIComponent(location.hash.slice(1));
+  } catch {
+    return;
+  }
   if (!id) return;
   const target = document.getElementById(id);
   if (target) requestAnimationFrame(() => target.focus({ preventScroll: true }));

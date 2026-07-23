@@ -21,14 +21,23 @@ const rulerExtremaByMode = Object.fromEntries([1, 2, 3, 4].map((mode) => [mode, 
 async function loadPage(context, label) {
   const page = await context.newPage();
   const errors = [];
+  page.__qaErrors = errors;
   page.on('console', (msg) => { if (msg.type() === 'error') errors.push(`console: ${msg.text()}`); });
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => errors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (networkResponse) => {
+    if (networkResponse.status() >= 400) errors.push(`response: ${networkResponse.status()} ${networkResponse.url()}`);
+  });
   const response = await page.goto(baseURL, { waitUntil: 'networkidle' });
   assert.equal(response.status(), 200, `${label}: HTTP status`);
   assert.equal(await page.title(), '會唱歌的尺｜懸臂梁振動理論與互動實驗');
   await page.waitForFunction(() => document.documentElement.dataset.ready === 'true');
   assert.deepEqual(errors, [], `${label}: JavaScript errors`);
   return { page, errors };
+}
+
+function assertNoPageErrors(page, label) {
+  assert.deepEqual(page.__qaErrors, [], `${label}: no runtime/network errors after all checks`);
 }
 
 async function setMaximumTickState(page) {
@@ -68,6 +77,12 @@ async function labSvgGeometryChecks(page, label, extreme = false) {
 
       const chart = document.querySelector('#lengthChart');
       const chartRect = chart.getBoundingClientRect();
+      const chartAxes = [...chart.querySelectorAll('.chart-axis')];
+      const horizontalAxis = chartAxes.find((axis) => axis.getAttribute('y1') === axis.getAttribute('y2'));
+      const plotWidth = horizontalAxis ? Number(horizontalAxis.getAttribute('x2')) - Number(horizontalAxis.getAttribute('x1')) : Number.NaN;
+      const finiteGeometry = [...chart.querySelectorAll('path, line, circle')].every((node) => [...node.attributes]
+        .filter((attribute) => ['d', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r'].includes(attribute.name))
+        .every((attribute) => !/NaN|Infinity/.test(attribute.value)));
       const chartTextBoxes = [...chart.querySelectorAll('.chart-text')].map(screenBox);
       const chartClippedText = chartTextBoxes.filter((box) => box.left < chartRect.left - 0.5
         || box.top < chartRect.top - 0.5
@@ -135,6 +150,8 @@ async function labSvgGeometryChecks(page, label, extreme = false) {
       }
 
       return {
+        plotWidth,
+        finiteGeometry,
         chartClippedText,
         chartTextOverlaps: pairwiseOverlap(chartTextBoxes, 2),
         chartGraphicOverlaps: [...new Set(chartGraphicOverlaps)],
@@ -144,6 +161,8 @@ async function labSvgGeometryChecks(page, label, extreme = false) {
       };
     }, { envelope: rulerExtremaByMode[mode] });
     assert.deepEqual(geometry.chartClippedText, [], `${label}: ${scenario} mode ${mode} chart text stays inside SVG`);
+    assert.equal(geometry.finiteGeometry, true, `${label}: ${scenario} mode ${mode} chart geometry stays finite`);
+    assert.ok(geometry.plotWidth >= 120, `${label}: ${scenario} mode ${mode} chart plot remains useful (${geometry.plotWidth})`);
     assert.deepEqual(geometry.chartTextOverlaps, [], `${label}: ${scenario} mode ${mode} chart text has safe pairwise clearance`);
     assert.deepEqual(geometry.chartGraphicOverlaps, [], `${label}: ${scenario} mode ${mode} chart text clears painted graphics`);
     assert.deepEqual(geometry.rulerClippedText, [], `${label}: ${scenario} mode ${mode} ruler labels stay inside SVG`);
@@ -194,6 +213,7 @@ async function resizeTransitionChecks(browser) {
     assert.deepEqual(geometry.overlaps, [], `${label}: resized maximum-tick chart text has safe clearance`);
     await page.locator('.chart-card').screenshot({ path: `${outDir}/${label}-maximum-mode4-chart.png` });
     results[label] = geometry;
+    assertNoPageErrors(page, label);
     await context.close();
   }
   return results;
@@ -239,29 +259,37 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
         for (let second = first + 1; second < renderedBoxes.length; second += 1) {
           const a = renderedBoxes[first];
           const b = renderedBoxes[second];
-          const overlapWidth = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-          const overlapHeight = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          const overlapWidth = Math.min(a.right + 2, b.right + 2) - Math.max(a.left - 2, b.left - 2);
+          const overlapHeight = Math.min(a.bottom + 2, b.bottom + 2) - Math.max(a.top - 2, b.top - 2);
           if (overlapWidth > 0.5 && overlapHeight > 0.5) overlappingLabels.push([a.text, b.text]);
         }
       }
       const graphicOverlaps = [];
-      if (step === 3) {
-        const envelope = document.querySelector('#storyModeEnvelope');
-        const animatedBeam = document.querySelector('#storyBeam3');
-        const pathLength = envelope.getTotalLength();
-        const halfStroke = Math.max(
-          Number.parseFloat(getComputedStyle(envelope).strokeWidth),
-          Number.parseFloat(getComputedStyle(animatedBeam).strokeWidth),
-        ) / 2;
-        const labelBoxes = labels.map((label) => ({ text: label.textContent, box: label.getBBox() }));
-        for (let sample = 0; sample <= 400; sample += 1) {
-          const point = envelope.getPointAtLength((pathLength * sample) / 400);
-          const extrema = [point.y, 340 - point.y];
-          labelBoxes.forEach(({ text, box }) => {
-            const insideX = point.x >= box.x - halfStroke && point.x <= box.x + box.width + halfStroke;
-            const intersectsY = extrema.some((y) => y >= box.y - halfStroke && y <= box.y + box.height + halfStroke);
-            if (insideX && intersectsY && !graphicOverlaps.includes(text)) graphicOverlaps.push(text);
-          });
+      for (const oscillation of [-1, 1]) {
+        theoryApi?.setOscillation(oscillation);
+        const extremeLabelBoxes = labels.map((label) => {
+          const box = label.getBoundingClientRect();
+          return { text: label.textContent, left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+        });
+        for (const graphic of visual.querySelectorAll('path, line, circle')) {
+          const length = graphic.getTotalLength();
+          const matrix = graphic.getScreenCTM();
+          const style = getComputedStyle(graphic);
+          const screenScale = Math.max(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
+          const strokeClearance = Number.parseFloat(style.strokeWidth || '0') * screenScale / 2 + 2;
+          const samples = Math.max(2, Math.ceil(length / 2));
+          for (let sample = 0; sample <= samples; sample += 1) {
+            const point = graphic.getPointAtLength(length * sample / samples);
+            const screenPoint = new DOMPoint(point.x, point.y).matrixTransform(matrix);
+            const markerClearance = (sample === 0 && graphic.hasAttribute('marker-start'))
+              || (sample === samples && graphic.hasAttribute('marker-end')) ? 10 * screenScale : 0;
+            const clearance = strokeClearance + markerClearance;
+            const hit = extremeLabelBoxes.find((box) => screenPoint.x >= box.left - clearance
+              && screenPoint.x <= box.right + clearance
+              && screenPoint.y >= box.top - clearance
+              && screenPoint.y <= box.bottom + clearance);
+            if (hit && !graphicOverlaps.includes(hit.text)) graphicOverlaps.push(hit.text);
+          }
         }
       }
       const heading = document.querySelector('.story-heading');
@@ -293,6 +321,7 @@ async function structuralChecks(page, label, expectedWidth, mobile) {
         stackedVisualBetweenTabsAndPanel: !window.matchMedia('(max-width: 920px)').matches || (visualRect.top >= tabsRect.bottom - 1 && visualRect.bottom <= panelRect.top + 1),
       };
     });
+    theoryApi?.setOscillation(0);
     theoryApi?.setStep(1);
     const storyBackground = getComputedStyle(document.querySelector('.story-visual')).backgroundColor;
     const hookBackground = firstGradientColor(document.querySelector('.student-hook'));
@@ -461,6 +490,86 @@ async function interactionChecks(page) {
   assert.deepEqual(invalidStepInputs.results, invalidStepInputs.results.map(() => ({ returned: false, threw: false })), 'public setStep rejects invalid inputs without coercion or exceptions');
   assert.deepEqual(invalidStepInputs.after, invalidStepInputs.before, 'invalid setStep inputs do not mutate state or DOM');
 
+  const snapshotImmutability = await page.evaluate(() => {
+    const api = window.__SINGING_RULER__;
+    const before = { frequency: api.snapshot.frequencyHz, series: [...api.snapshot.seriesHz] };
+    let arrayMutationThrew = false;
+    try { api.snapshot.seriesHz.push(123); } catch { arrayMutationThrew = true; }
+    try { api.snapshot.frequencyHz = 0; } catch { /* assignment may be silent outside strict mode */ }
+    return {
+      stateFrozen: Object.isFrozen(api.state),
+      snapshotFrozen: Object.isFrozen(api.snapshot),
+      seriesFrozen: Object.isFrozen(api.snapshot.seriesHz),
+      arrayMutationThrew,
+      unchanged: api.snapshot.frequencyHz === before.frequency
+        && JSON.stringify(api.snapshot.seriesHz) === JSON.stringify(before.series),
+    };
+  });
+  assert.deepEqual(snapshotImmutability, {
+    stateFrozen: true, snapshotFrozen: true, seriesFrozen: true, arrayMutationThrew: true, unchanged: true,
+  }, 'published state and nested snapshot data are immutable copies');
+
+  const validationLiveRegion = await page.evaluate(() => {
+    const region = document.querySelector('#customValidation');
+    window.__validationMutations = [];
+    new MutationObserver(() => {
+      window.__validationMutations.push({
+        connected: region.isConnected,
+        hidden: region.hidden,
+        display: getComputedStyle(region).display,
+        text: region.textContent,
+      });
+    }).observe(region, { childList: true, characterData: true, subtree: true });
+    return { role: region.getAttribute('role'), live: region.getAttribute('aria-live'), hidden: region.hidden, display: getComputedStyle(region).display };
+  });
+  assert.deepEqual(validationLiveRegion, { role: 'status', live: 'polite', hidden: false, display: 'block' }, 'empty validation live region is present in the accessibility tree before errors');
+
+  await page.locator('#material').selectOption('custom');
+  await page.locator('#young').evaluate((element) => {
+    element.value = '1';
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const lastValidSnapshot = await page.evaluate(() => JSON.stringify(window.__SINGING_RULER__.snapshot));
+  const announcementBeforeInvalid = await page.locator('#resultAnnouncement').textContent();
+  await page.locator('#young').evaluate((element) => {
+    element.value = '';
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  assert.equal(await page.locator('#customValidation').isVisible(), true, 'empty custom input shows inline validation');
+  assert.equal(await page.locator('#young').getAttribute('aria-invalid'), 'true', 'empty custom input is marked invalid');
+  const validationMutation = await page.evaluate(() => window.__validationMutations.at(-1));
+  assert.equal(validationMutation.connected && !validationMutation.hidden && validationMutation.display !== 'none' && /楊氏係數/.test(validationMutation.text), true, 'validation text mutates while its live region is exposed');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__SINGING_RULER__.snapshot)), lastValidSnapshot, 'empty custom input retains last valid snapshot');
+  await page.waitForTimeout(350);
+  assert.equal(await page.locator('#resultAnnouncement').textContent(), announcementBeforeInvalid, 'invalid input cancels the pending valid-result announcement');
+  await page.evaluate(() => {
+    const young = document.querySelector('#young');
+    const density = document.querySelector('#density');
+    young.value = '1e290';
+    density.value = '';
+    young.dispatchEvent(new Event('input', { bubbles: true }));
+    density.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  assert.equal(await page.locator('#customValidation').isVisible(), true, 'simultaneous invalid custom inputs show inline validation');
+  assert.equal(await page.locator('#young').getAttribute('aria-invalid'), 'true', 'out-of-range Young modulus is marked invalid');
+  assert.equal(await page.locator('#density').getAttribute('aria-invalid'), 'true', 'empty density is also marked invalid');
+  assert.match(await page.locator('#customValidation').textContent(), /楊氏係數.*密度/, 'live validation reports every invalid custom field');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__SINGING_RULER__.snapshot)), lastValidSnapshot, 'simultaneous invalid inputs retain last valid snapshot');
+  await page.evaluate(() => {
+    const young = document.querySelector('#young');
+    const density = document.querySelector('#density');
+    young.value = '193';
+    density.value = '8000';
+    young.dispatchEvent(new Event('input', { bubbles: true }));
+    density.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  assert.equal(await page.locator('#customValidation').textContent(), '', 'valid custom inputs clear validation text while retaining the live region');
+  await page.locator('#reset').click();
+
+  await page.evaluate(() => { location.hash = '#%'; });
+  await page.waitForTimeout(50);
+  assert.equal(await page.evaluate(() => Boolean(window.__SINGING_RULER__?.snapshot?.frequencyHz)), true, 'malformed hash is ignored without breaking the app');
+
   await page.locator('#story-tab-2').click();
   assert.equal(await page.locator('#story-tab-2').getAttribute('aria-selected'), 'true', 'theory tab click selects step 2');
   assert.equal(await page.locator('#story-panel-2').isVisible(), true, 'theory step 2 panel visible');
@@ -610,6 +719,7 @@ try {
   await desktopPage.screenshot({ path: `${outDir}/desktop.png`, fullPage: true });
   await desktopPage.locator('#story-tab-3').click();
   await desktopPage.locator('.theory-story').screenshot({ path: `${outDir}/desktop-step3.png` });
+  assertNoPageErrors(desktopPage, 'desktop');
   await desktop.close();
 
   const medium = await browser.newContext({ viewport: { width: 1024, height: 900 }, reducedMotion: 'no-preference' });
@@ -621,6 +731,7 @@ try {
   await setMaximumTickState(mediumPage);
   await mediumPage.locator('#mode').selectOption('4');
   await mediumPage.locator('.chart-card').screenshot({ path: `${outDir}/medium1024-maximum-mode4-chart.png` });
+  assertNoPageErrors(mediumPage, 'medium1024');
   await medium.close();
 
   for (const width of [921, 920]) {
@@ -642,6 +753,7 @@ try {
       document.querySelector('#rulerPath').setAttribute('d', envelope.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(2)} ${point.positiveY.toFixed(2)}`).join(' '));
     }, { envelope: rulerExtremaByMode[1] });
     await breakpointPage.locator('.ruler-stage').screenshot({ path: `${outDir}/${label}-ruler-extreme.png` });
+    assertNoPageErrors(breakpointPage, label);
     await breakpoint.close();
   }
 
@@ -656,6 +768,7 @@ try {
   await setMaximumTickState(mobilePage);
   await mobilePage.locator('#mode').selectOption('4');
   await mobilePage.locator('.chart-card').screenshot({ path: `${outDir}/mobile390-maximum-mode4-chart.png` });
+  assertNoPageErrors(mobilePage, 'mobile390');
   await mobile.close();
 
   const narrow = await browser.newContext({ viewport: { width: 320, height: 800 }, reducedMotion: 'no-preference' });
@@ -667,6 +780,7 @@ try {
   await setMaximumTickState(narrowPage);
   await narrowPage.locator('#mode').selectOption('4');
   await narrowPage.locator('.chart-card').screenshot({ path: `${outDir}/narrow320-maximum-mode4-chart.png` });
+  assertNoPageErrors(narrowPage, 'narrow320');
   await narrow.close();
 
   const reduced = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
@@ -685,6 +799,7 @@ try {
   assert.equal(reducedStopped1, reducedStopped2, 'reduced-motion visual stays still after autoplay stops');
   report.interactions.reducedMotionStartsPaused = true;
   report.interactions.reducedMotionTheoryOptIn = true;
+  assertNoPageErrors(reducedPage, 'reduced-motion');
   await reduced.close();
 
   await fs.writeFile(`${outDir}/report.json`, JSON.stringify(report, null, 2));

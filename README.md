@@ -48,10 +48,10 @@ BASE_URL=http://127.0.0.1:9057/ npm run qa
 
 驗證範圍包括：
 
-- 10項物理核心回歸測試
-- 1440×1000、390×844、320×800精確視窗
+- 11項物理與輸入防禦回歸測試
+- 1440、1024、921、920、390、320像素寬的精確視窗
 - 長度平方反比、厚度正比、寬度消去、模態比、Rayleigh–Ritz係數
-- 暫停、重設、自訂材料、hash焦點與reduced-motion
+- 暫停、重設、自訂材料驗證、hash焦點與reduced-motion
 - 水平溢出、觸控尺寸、公式可讀文字與axe WCAG A/AA
 
 ## 模型邊界
@@ -60,8 +60,8 @@ BASE_URL=http://127.0.0.1:9057/ npm run qa
 
 ## 來源
 
-- [使用者提供的TYPT簡報](https://docs.google.com/presentation/d/1akDcTAOU-9ehleRdiBTwEz9q5GR1JFO4k2vMnx7Qoe4/edit)
-- [GYPT Problems](https://www.gypt.org/problems/)
+- [使用者提供的TYPT簡報](https://docs.google.com/presentation/d/1KL1EgClQH7qyMllYU0xf3RIf7cquG6kQ/edit)
+- [GYPT第13題：The Singing Ruler](https://www.gypt.org/aufgaben/13-the-singing-ruler.html)
 
 ## 授權
 

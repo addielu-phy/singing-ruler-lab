@@ -118,17 +118,17 @@
                 <g data-theory-visual="1">
                   <path id="storyBeam1" class="story-beam" d="M92 170 C280 170 510 182 704 230"/>
                   <line id="storyPressArrow" class="story-force-arrow" x1="704" y1="90" x2="704" y2="205" marker-end="url(#storyArrowAmber)"/>
-                  <text class="story-svg-label" x="704" y="76" text-anchor="end">手向下壓</text>
+                  <text class="story-svg-label" x="704" y="48" text-anchor="end">手向下壓</text>
                   <path class="story-return-arrow" d="M560 222 Q610 187 648 180" marker-end="url(#storyArrowGreen)"/>
-                  <text class="story-svg-label story-green" x="704" y="276" text-anchor="end">彈性想把尺拉回</text>
-                  <text class="story-svg-note" x="104" y="344">彎曲越明顯，內部彎矩越大</text>
+                  <text class="story-svg-label story-green" x="704" y="304" text-anchor="end">彈性想把尺拉回</text>
+                  <text class="story-svg-note" x="104" y="344">彎曲大 → 彎矩大</text>
                 </g>
 
                 <g data-theory-visual="2" hidden>
                   <path id="storyBeam2" class="story-beam" d="M92 170 C280 170 510 170 704 170"/>
                   <g id="storyMassLayer" aria-hidden="true"></g>
                   <line id="storyAccelArrow" class="story-accel-arrow" x1="520" y1="235" x2="520" y2="178" marker-end="url(#storyArrowBlue)"/>
-                  <text class="story-svg-label" x="704" y="76" text-anchor="end">藍箭頭：淨力／加速度方向</text>
+                  <text class="story-svg-label" x="704" y="44" text-anchor="end">藍箭頭：淨力／加速度方向</text>
                   <text class="story-svg-note" x="104" y="344">每一小段都有彈性，也都有質量</text>
                 </g>
 
@@ -139,7 +139,7 @@
                   <circle class="boundary-dot free" cx="704" cy="170" r="10"/>
                   <text class="story-svg-label" x="102" y="48">固定端：不能移動、不能轉動</text>
                   <text class="story-svg-label" x="704" y="292" text-anchor="end">自由端：彎矩與剪力為0</text>
-                  <text class="story-svg-note" x="104" y="104">虛線：第一模態最大位移形狀</text>
+                  <text class="story-svg-note" x="104" y="113">虛線＝第1模態極值</text>
                   <g class="mode-tags"><text x="104" y="346">圖中只畫第1模態：β₁=1.875</text></g>
                 </g>
               </svg>
@@ -287,13 +287,14 @@
             <div class="two-controls custom-material" hidden>
               <div class="control-group">
                 <label for="young">楊氏係數 <span>E</span></label>
-                <div class="number-unit"><input id="young" type="number" min="0.1" max="500" step="0.1" value="193" disabled><span>GPa</span></div>
+                <div class="number-unit"><input id="young" type="number" min="0.1" max="500" step="0.1" value="193" aria-describedby="customValidation" required disabled><span>GPa</span></div>
               </div>
               <div class="control-group">
                 <label for="density">密度 <span>ρ</span></label>
-                <div class="number-unit"><input id="density" type="number" min="100" max="25000" step="10" value="8000" disabled><span>kg/m³</span></div>
+                <div class="number-unit"><input id="density" type="number" min="100" max="25000" step="10" value="8000" aria-describedby="customValidation" required disabled><span>kg/m³</span></div>
               </div>
             </div>
+            <p id="customValidation" class="validation-message" role="status" aria-live="polite"></p>
 
             <div class="control-group">
               <div class="label-row"><label for="length">有效長度 <span>L</span></label><output for="length" id="lengthOut">6.0 cm</output></div>

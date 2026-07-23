@@ -79,6 +79,7 @@ export function initTheoryExplainer() {
       motionRunning,
       autoPlaying,
       setStep: (value) => setStep(value, { announce: false }),
+      setOscillation: (value) => setOscillation(value),
       pause: () => setMotion(false),
       play: () => setMotion(true),
     };
@@ -108,6 +109,14 @@ export function initTheoryExplainer() {
           : '示意動畫已暫停。';
     }
     publishState();
+  }
+
+  function setOscillation(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < -1 || value > 1) return false;
+    currentOscillation = value;
+    drawFrame();
+    publishState();
+    return true;
   }
 
   function setAutoplay(next) {

@@ -100,3 +100,11 @@ test('cantilever mode shape is clamped and normalized at the free end', () => {
     assert.ok(Math.abs(cantileverModeShape(1e-5, mode)) < 1e-7);
   }
 });
+
+test('mode rejects coercive, fractional, and non-finite values', () => {
+  const invalidModes = [1.5, 2.0000001, '2', true, false, null, Number.NaN, Infinity, {}, [2]];
+  for (const mode of invalidModes) {
+    assert.throws(() => eulerBernoulliFrequency({ ...base, mode }), RangeError);
+    assert.throws(() => cantileverModeShape(0.5, mode), RangeError);
+  }
+});
